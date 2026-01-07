@@ -75,18 +75,7 @@ python gui_data/gui_modern_extractor.py
 
 ---
 
-## 📚 Documentation
 
-All documentation is now organized in the `docs/` folder:
-
-- **[docs/CREDITS.md](docs/CREDITS.md)** - Full credits and attribution
-- **[docs/MODERN_GUI_GUIDE.md](docs/MODERN_GUI_GUIDE.md)** - Detailed usage guide
-- **[docs/START_HERE.md](docs/START_HERE.md)** - Getting started
-- **[docs/CHANGELOG_v1.1.md](docs/CHANGELOG_v1.1.md)** - Version history
-- **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)** - Complete user guide
-- **[docs/TECHNICAL_SPECIFICATIONS.md](docs/TECHNICAL_SPECIFICATIONS.md)** - Technical details
-
----
 
 ## ⚡ Performance
 
