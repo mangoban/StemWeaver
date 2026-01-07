@@ -228,7 +228,7 @@ For the complete license text, see [LICENSE](LICENSE)
 
 For issues, suggestions, or questions:
 - **Developer**: bendeb creations
-- **Email**: contact@example.com
+- **Email**: contact@bendebcreations.com
 - **License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
 
 ---
