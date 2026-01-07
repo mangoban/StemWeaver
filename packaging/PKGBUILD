@@ -1,0 +1,56 @@
+# PKGBUILD template for packaging Universal Sound Extractor on Arch/Manjaro
+# This is a template. Edit pkgver and source to match your release source (zip/tar or git tag)
+pkgname=ultimatevocalremovergui
+pkgver=5.6.0
+pkgrel=1
+pkgdesc="GUI front-end for music source separation — fork maintained for Manjaro"
+arch=(x86_64)
+url="https://github.com/yourname/ultimatevocalremovergui"
+license=(MIT)
+depends=(python python-pip python-virtualenv ffmpeg rubberband libsndfile tk)
+makedepends=(git)
+source=("${pkgname}-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir"
+  tar -xzf "${pkgname}-${pkgver}.tar.gz"
+}
+
+package() {
+  cd "$srcdir/${pkgname}-${pkgver}"
+  # install into /opt
+  install -d "$pkgdir/opt/${pkgname}"
+  cp -a . "$pkgdir/opt/${pkgname}/"
+
+  # wrapper script
+  install -d "$pkgdir/usr/bin"
+  cat > "$pkgdir/usr/bin/uvr" <<'EOF'
+#!/bin/sh
+BASE=/opt/ultimatevocalremovergui
+if [ -x "$BASE/venv/bin/python" ]; then
+  exec "$BASE/venv/bin/python" "$BASE/UVR.py" "$@"
+else
+  exec python "$BASE/UVR.py" "$@"
+fi
+EOF
+  chmod 755 "$pkgdir/usr/bin/uvr"
+
+  # desktop file
+  install -d "$pkgdir/usr/share/applications"
+  cat > "$pkgdir/usr/share/applications/ultimatevocalremovergui.desktop" <<'EOF'
+[Desktop Entry]
+Name=Ultimate Vocal Remover GUI
+Comment=Separate vocals and instruments from audio files
+Exec=/usr/bin/uvr
+Icon=ultimatevocalremovergui
+Type=Application
+Categories=Audio;AudioVideo;
+EOF
+
+  install -d "$pkgdir/usr/share/icons/hicolor/256x256/apps"
+  # copy an icon if available
+  if [ -f gui_data/img/UVR_v5.6.png ]; then
+    install -m 644 gui_data/img/UVR_v5.6.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/ultimatevocalremovergui.png"
+  fi
+}

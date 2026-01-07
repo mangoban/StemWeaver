@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+myenv/
+*.egg-info/
+dist/
+build/
+
+# AI Models and large files
+*.pth
+*.ckpt
+models/
+lib_v5/vr_network/modelparams/
+
+# AppImage and binaries
+*.AppImage
+AppDir/
+!AppDir/stemweaver.desktop
+!AppDir/stemweaver.svg
+!AppDir/.DirIcon
+
+# Audio files (user data)
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+test_audio.wav
+
+# Output directories
+StemWeaver_Output/
+output/
+output_dir/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+build.log
+download_tools_log.txt
+
+# Temporary files
+_temp_*
+*.tmp
+
+# Development files
+.history/
+dev/
+packaging/download_tools_log.txt
+
+# Documentation - keep README, LICENSE, CONTRIBUTING only
+docs/
+LICENSE_SUMMARY.md
+GITHUB_SETUP.md
+PUSH_SUMMARY.txt
+
+# Virtual environment (if in root)
+bin/
+lib/
+include/
+
+# Large binaries
+StemWeaver-v1.1-x86_64.AppImage

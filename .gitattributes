@@ -1,0 +1,32 @@
+# Set the default behavior, in case people don't have core.autocrlf set.
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted.
+*.py text
+*.md text
+*.txt text
+*.sh text
+*.desktop text
+*.json text
+
+# Declare files that will always have CRLF line endings on checkout.
+# (None currently)
+
+# Declare files that will always have LF line endings on checkout.
+*.py text eol=lf
+*.sh text eol=lf
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.AppImage binary
+*.pth binary
+*.ckpt binary
+*.wav binary
+*.mp3 binary
+*.flac binary
+*.ogg binary
+*.mid binary

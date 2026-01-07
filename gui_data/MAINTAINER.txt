@@ -1,0 +1,5 @@
+Maintainer: mango ban
+Repository: https://github.com/mangoban/ultimatevocalremovergui
+Contact: https://github.com/mangoban
+
+This file is a small, visible marker used by the UI to show the current maintainer.

@@ -1,0 +1,22 @@
+# StemWeaver v1.1 Requirements
+# Core GUI Framework
+dearpygui==2.1.1
+
+# Audio Processing
+numpy==2.3.5
+soundfile==0.13.1
+librosa==0.11.0
+
+# AI Models
+torch==2.9.1
+torchaudio==2.9.1
+demucs==4.0.1
+
+# MIDI Export
+pretty_midi==0.2.11
+midiutil==1.2.1
+
+# Optional: For GPU support (NVIDIA CUDA)
+# torch==2.9.1+cu128
+# torchaudio==2.9.1+cu128
+# Install from: https://download.pytorch.org/whl/cu128
