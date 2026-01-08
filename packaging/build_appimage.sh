@@ -110,6 +110,25 @@ APPIMAGETOOL="$TOOLS_DIR/appimagetool-x86_64.AppImage"
 # Make AppImage executable
 chmod +x "$LINUXDEPLOY" "$APPIMAGETOOL"
 
+# Extract appimagetool to avoid FUSE issues
+if [ -f "$APPIMAGETOOL" ]; then
+  echo "Extracting appimagetool to avoid FUSE issues..."
+  cd "$TOOLS_DIR"
+  if ! "$APPIMAGETOOL" --appimage-extract >/dev/null 2>&1; then
+    echo "Extract failed, trying with --appimage-extract-and-run..."
+    "$APPIMAGETOOL" --appimage-extract-and-run --appimage-extract >/dev/null 2>&1 || true
+  fi
+  cd "$REPO_ROOT"
+  
+  # Use extracted appimagetool if available
+  if [ -f "$TOOLS_DIR/squashfs-root/AppRun" ]; then
+    APPIMAGETOOL="$TOOLS_DIR/squashfs-root/AppRun"
+    echo "Using extracted appimagetool: $APPIMAGETOOL"
+  else
+    echo "Using original appimagetool with extract-and-run"
+  fi
+fi
+
 # Verify tools are executable
 if [ ! -x "$APPIMAGETOOL" ]; then
   echo "Error: appimagetool is not executable"
@@ -130,13 +149,18 @@ chmod +x "$APPDIR/AppRun"
 echo "Creating AppImage..."
 cd "$APPDIR"
 
-# Use --appimage-extract-and-run to avoid FUSE issues in CI environments
+# Use the appropriate appimagetool approach
 if [ -x "$APPIMAGETOOL" ]; then
-  echo "Using appimagetool with extract-and-run..."
-  # Try with extract-and-run first, fallback to normal if that fails
-  if ! "$APPIMAGETOOL" --appimage-extract-and-run . "../$APPIMAGE" 2>/dev/null; then
-    echo "Extract-and-run failed, trying normal mode..."
+  if [ "$APPIMAGETOOL" = "$TOOLS_DIR/squashfs-root/AppRun" ]; then
+    echo "Using extracted appimagetool..."
     "$APPIMAGETOOL" . "../$APPIMAGE"
+  else
+    echo "Using appimagetool with extract-and-run..."
+    # Try with extract-and-run first, fallback to normal if that fails
+    if ! "$APPIMAGETOOL" --appimage-extract-and-run . "../$APPIMAGE" 2>/dev/null; then
+      echo "Extract-and-run failed, trying normal mode..."
+      "$APPIMAGETOOL" . "../$APPIMAGE"
+    fi
   fi
 else
   echo "Error: appimagetool not found or not executable"
