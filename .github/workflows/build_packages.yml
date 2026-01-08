@@ -34,8 +34,8 @@ jobs:
       
       - name: Build AppImage
         run: |
-          chmod +x build_appimage.sh
-          ./build_appimage.sh
+          chmod +x packaging/build_appimage.sh
+          ./packaging/build_appimage.sh
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -95,8 +95,8 @@ jobs:
       
       - name: Build AppImage
         run: |
-          chmod +x build_appimage.sh
-          ./build_appimage.sh
+          chmod +x packaging/build_appimage.sh
+          ./packaging/build_appimage.sh
       
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
@@ -129,8 +129,8 @@ jobs:
       
       - name: Build DEB package
         run: |
-          chmod +x build_deb.sh
-          ./build_deb.sh
+          chmod +x packaging/build_deb.sh
+          ./packaging/build_deb.sh
       
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
@@ -163,8 +163,8 @@ jobs:
       
       - name: Build RPM package
         run: |
-          chmod +x build_rpm.sh
-          ./build_rpm.sh
+          chmod +x packaging/build_rpm.sh
+          ./packaging/build_rpm.sh
       
       - name: Upload RPM artifact
         uses: actions/upload-artifact@v4
@@ -197,8 +197,8 @@ jobs:
       
       - name: Build Arch package
         run: |
-          chmod +x build_arch.sh
-          ./build_arch.sh
+          chmod +x packaging/build_arch.sh
+          ./packaging/build_arch.sh
       
       - name: Upload Arch package artifact
         uses: actions/upload-artifact@v4
