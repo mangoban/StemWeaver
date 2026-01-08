@@ -110,6 +110,12 @@ APPIMAGETOOL="$TOOLS_DIR/appimagetool-x86_64.AppImage"
 # Make AppImage executable
 chmod +x "$LINUXDEPLOY" "$APPIMAGETOOL"
 
+# Verify tools are executable
+if [ ! -x "$APPIMAGETOOL" ]; then
+  echo "Error: appimagetool is not executable"
+  exit 1
+fi
+
 # Set AppRun for the AppDir
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
@@ -123,8 +129,27 @@ chmod +x "$APPDIR/AppRun"
 # Create AppImage using appimagetool
 echo "Creating AppImage..."
 cd "$APPDIR"
-"$APPIMAGETOOL" . "../$APPIMAGE"
+
+# Use --appimage-extract-and-run to avoid FUSE issues in CI environments
+if [ -x "$APPIMAGETOOL" ]; then
+  echo "Using appimagetool with extract-and-run..."
+  # Try with extract-and-run first, fallback to normal if that fails
+  if ! "$APPIMAGETOOL" --appimage-extract-and-run . "../$APPIMAGE" 2>/dev/null; then
+    echo "Extract-and-run failed, trying normal mode..."
+    "$APPIMAGETOOL" . "../$APPIMAGE"
+  fi
+else
+  echo "Error: appimagetool not found or not executable"
+  exit 1
+fi
+
 cd ..
 
-echo "✅ AppImage created: $APPIMAGE"
-ls -lh "$APPIMAGE"
+# Verify AppImage was created successfully
+if [ -f "$APPIMAGE" ]; then
+  echo "✅ AppImage created successfully: $APPIMAGE"
+  ls -lh "$APPIMAGE"
+else
+  echo "❌ AppImage creation failed"
+  exit 1
+fi
