@@ -1,0 +1,143 @@
+name: Build StemWeaver - All Platforms
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # Build AppImage for x86_64
+  build-appimage-x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-venv \
+            libfuse2 libglib2.0-0 desktop-file-utils \
+            imagemagick wget file
+            
+      - name: Download build tools
+        run: |
+          mkdir -p packaging/tools
+          cd packaging/tools
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x *.AppImage
+          
+      - name: Build AppImage
+        run: |
+          cd packaging
+          ./build_appimage.sh
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemWeaver-x86_64.AppImage
+          path: packaging/StemWeaver-*.AppImage
+
+  # Build AppImage for ARM64
+  build-appimage-arm64:
+    runs-on: ubuntu-24.04-arm64
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip python3-venv \
+            libfuse2 libglib2.0-0 desktop-file-utils \
+            imagemagick wget file
+            
+      - name: Download build tools
+        run: |
+          mkdir -p packaging/tools
+          cd packaging/tools
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-aarch64.AppImage
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage
+          chmod +x *.AppImage
+          
+      - name: Build AppImage
+        run: |
+          cd packaging
+          ./build_appimage.sh
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemWeaver-aarch64.AppImage
+          path: packaging/StemWeaver-*.AppImage
+
+  # Build Windows package
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+          
+      - name: Build Windows package
+        shell: pwsh
+        run: |
+          cd packaging
+          .\build_windows.ps1
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemWeaver-Windows
+          path: |
+            packaging/build/windows/StemWeaver-Windows-x64.zip
+            packaging/build/windows/StemWeaver-Windows-x64-Setup.exe
+
+  # Build Arch Linux package
+  build-arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build in Arch Linux container
+        uses: docker://archlinux:latest
+        with:
+          run: |
+            pacman -Syu --noconfirm base-devel git python python-pip ffmpeg
+            cd /__w/StemWeaver/StemWeaver/packaging
+            makepkg -si --noconfirm
+            
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: StemWeaver-Arch-Package
+          path: packaging/stemweaver-*.pkg.tar.zst
+
+  # Create GitHub Release
+  create-release:
+    needs: [build-appimage-x86_64, build-appimage-arm64, build-windows, build-arch]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            StemWeaver-x86_64.AppImage/StemWeaver-*.AppImage
+            StemWeaver-aarch64.AppImage/StemWeaver-*.AppImage
+            StemWeaver-Windows/StemWeaver-Windows-x64.zip
+            StemWeaver-Windows/StemWeaver-Windows-x64-Setup.exe
+            StemWeaver-Arch-Package/stemweaver-*.pkg.tar.zst
+          draft: false
+          prerelease: false
+          generate_release_notes: true

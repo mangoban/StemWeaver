@@ -1,0 +1,138 @@
+name: Build Arch Linux Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-arch:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git python python-pip python-virtualenv ffmpeg
+      
+      - name: Update package version from tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          echo "Version: $TAG"
+          sed -i "s/pkgver=.*/pkgver=$TAG/" packaging/PKGBUILD
+      
+      - name: Build package
+        run: |
+          cd packaging
+          makepkg -cs --noconfirm --needed
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: packaging/*.pkg.tar.zst
+      
+      - name: Create Release Asset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: packaging/*.pkg.tar.zst
+          asset_name: stemweaver-${{ github.ref_name }}-x86_64.pkg.tar.zst
+          asset_content_type: application/octet-stream
+
+  build-aarch64:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinuxarm:latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git python python-pip python-virtualenv ffmpeg
+      
+      - name: Update package version from tag
+        run: |
+          TAG=${GITHUB_REF#refs/tags/v}
+          echo "Version: $TAG"
+          sed -i "s/pkgver=.*/pkgver=$TAG/" packaging/PKGBUILD
+          sed -i "s/arch=(x86_64 aarch64)/arch=(aarch64)/" packaging/PKGBUILD
+      
+      - name: Build package
+        run: |
+          cd packaging
+          makepkg -cs --noconfirm --needed
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package-aarch64
+          path: packaging/*.pkg.tar.zst
+      
+      - name: Create Release Asset
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: packaging/*.pkg.tar.zst
+          asset_name: stemweaver-${{ github.ref_name }}-aarch64.pkg.tar.zst
+          asset_content_type: application/octet-stream
+
+  create-release:
+    needs: [build-arch, build-aarch64]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: StemWeaver ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          body: |
+            ## StemWeaver ${{ github.ref_name }}
+            
+            ### Arch Linux Packages
+            - **x86_64**: `stemweaver-${{ github.ref_name }}-x86_64.pkg.tar.zst`
+            - **aarch64**: `stemweaver-${{ github.ref_name }}-aarch64.pkg.tar.zst`
+            
+            ### Installation
+            ```bash
+            # For x86_64
+            sudo pacman -U stemweaver-*-x86_64.pkg.tar.zst
+            
+            # For aarch64 (Raspberry Pi, etc.)
+            sudo pacman -U stemweaver-*-aarch64.pkg.tar.zst
+            ```
+            
+            ### What's New
+            - See CHANGELOG.md for details
+            
+            ### Dependencies
+            - python, python-pip, ffmpeg
+            - Optional: cuda (NVIDIA GPU), rocm-opencl-runtime (AMD GPU)
+            
+            ### Support
+            Buy Me a Coffee: https://buymeacoffee.com/mangoban

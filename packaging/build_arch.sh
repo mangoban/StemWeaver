@@ -4,112 +4,77 @@ set -euo pipefail
 # build_arch.sh - Build Arch Linux package for StemWeaver
 # Creates a .pkg.tar.zst package for Arch/Manjaro
 
-echo "Building StemWeaver Arch Linux package..."
+echo "=== StemWeaver Arch/Manjaro Package Builder ==="
 
-# Check if AppImage exists
-if [ ! -f "StemWeaver-v1.1-x86_64.AppImage" ]; then
-  echo "Error: AppImage not found. Run build_appimage.sh first."
-  exit 1
+# Detect architecture
+ARCH=$(uname -m)
+echo "Detected architecture: $ARCH"
+
+# Check if running on Arch/Manjaro
+if ! command -v pacman &> /dev/null; then
+    echo "Error: This script must be run on Arch Linux or Manjaro"
+    exit 1
 fi
+
+# Check if running as root
+if [ "$EUID" -eq 0 ]; then
+    echo "Error: Do not run as root. makepkg will handle privileges."
+    exit 1
+fi
+
+# Install required dependencies
+echo "Installing build dependencies..."
+sudo pacman -S --needed --noconfirm base-devel git python python-pip ffmpeg
 
 # Create build directory
-BUILD_DIR="arch_build"
+BUILD_DIR="build/arch"
 rm -rf "$BUILD_DIR"
-mkdir -p "$BUILD_DIR/pkg"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
 
-# Extract AppImage to get contents
-echo "Extracting AppImage..."
-./StemWeaver-v1.1-x86_64.AppImage --appimage-extract-and-run --appimage-extract -d "$BUILD_DIR/extracted" 2>/dev/null || true
-
-# If extraction failed, use a different approach
-if [ ! -d "$BUILD_DIR/extracted" ]; then
-  echo "Using alternative packaging method..."
-  mkdir -p "$BUILD_DIR/pkg/usr/bin"
-  mkdir -p "$BUILD_DIR/pkg/usr/share/applications"
-  mkdir -p "$BUILD_DIR/pkg/usr/share/icons/hicolor/256x256/apps"
-  mkdir -p "$BUILD_DIR/pkg/usr/share/stemweaver"
-  
-  # Copy AppImage as the main binary
-  cp StemWeaver-v1.1-x86_64.AppImage "$BUILD_DIR/pkg/usr/bin/stemweaver"
-  chmod 755 "$BUILD_DIR/pkg/usr/bin/stemweaver"
-  
-  # Create desktop file
-  cat > "$BUILD_DIR/pkg/usr/share/applications/stemweaver.desktop" <<'EOF'
-[Desktop Entry]
-Name=StemWeaver
-Comment=Professional Audio Stem Separation Tool
-Exec=/usr/bin/stemweaver
-Icon=stemweaver
-Type=Application
-Categories=Audio;AudioVideo;
-Terminal=false
-EOF
-
-  # Copy icon if available
-  if [ -f "gui_data/img/stemweaver.png" ]; then
-    cp "gui_data/img/stemweaver.png" "$BUILD_DIR/pkg/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
-  fi
+# Copy appropriate PKGBUILD
+if [ "$ARCH" = "x86_64" ]; then
+    PKGBUILD_FILE="../../packaging/PKGBUILD"
+elif [ "$ARCH" = "aarch64" ]; then
+    PKGBUILD_FILE="../../packaging/PKGBUILD.manjaro"
 else
-  # Use extracted contents
-  mkdir -p "$BUILD_DIR/pkg/usr"
-  cp -r "$BUILD_DIR/extracted/squashfs-root/usr/"* "$BUILD_DIR/pkg/usr/" 2>/dev/null || true
-  
-  # Ensure bin directory exists
-  mkdir -p "$BUILD_DIR/pkg/usr/bin"
-  if [ -f "$BUILD_DIR/pkg/usr/bin/stemweaver" ]; then
-    chmod 755 "$BUILD_DIR/pkg/usr/bin/stemweaver"
-  fi
+    echo "Error: Unsupported architecture: $ARCH"
+    exit 1
 fi
 
-# Create PKGBUILD
-cat > "$BUILD_DIR/PKGBUILD" <<'EOF'
-pkgname=stemweaver
-pkgver=1.1.0
-pkgrel=1
-pkgdesc="Professional Audio Stem Separation Tool using AI"
-arch=(x86_64)
-url="https://github.com/mangoban/StemWeaver"
-license=('CC BY 4.0')
-depends=()
-optdepends=('ffmpeg: for audio format support')
-install=stemweaver.install
-source=()
-sha256sums=()
+if [ ! -f "$PKGBUILD_FILE" ]; then
+    echo "Error: $PKGBUILD_FILE not found"
+    exit 1
+fi
 
-package() {
-  cd "$srcdir/pkg"
-  cp -r * "$pkgdir/"
-}
-EOF
+cp "$PKGBUILD_FILE" PKGBUILD
 
-# Create install file
-cat > "$BUILD_DIR/stemweaver.install" <<'EOF'
-post_install() {
-  echo "StemWeaver installed successfully!"
-  echo "Run 'stemweaver' to start the application."
-  echo ""
-  echo "Note: This package includes all Python dependencies."
-  echo "No additional setup required."
-}
+# Download source
+echo "Downloading source..."
+PKGVER=$(grep "^pkgver=" PKGBUILD | cut -d= -f2)
+wget -q "https://github.com/mangoban/StemWeaver/archive/refs/tags/v${PKGVER}.tar.gz" -O "v${PKGVER}.tar.gz"
 
-post_upgrade() {
-  post_install
-}
-EOF
+# Build package
+echo "Building package..."
+makepkg -si --noconfirm
 
-# Build the package
-cd "$BUILD_DIR"
-echo "Building package with makepkg..."
-makepkg -c --syncdeps --noconfirm
-
-# Find and move the package
+# Find and move package
 PKG_FILE=$(find . -name "*.pkg.tar.zst" -type f | head -1)
 if [ -n "$PKG_FILE" ]; then
-  cd ..
-  mv "$BUILD_DIR/$PKG_FILE" ./
-  echo "✅ Arch package created: $PKG_FILE"
-  ls -lh "$PKG_FILE"
+    cd ../..
+    mv "build/arch/$PKG_FILE" ./
+    echo ""
+    echo "=== Build Complete ==="
+    echo "Package: $PKG_FILE"
+    echo ""
+    echo "To install:"
+    echo "  sudo pacman -U $PKG_FILE"
+    echo ""
+    echo "To publish to AUR:"
+    echo "  1. Update PKGBUILD version"
+    echo "  2. Run: makepkg --printsrcinfo > .SRCINFO"
+    echo "  3. Commit to AUR repository"
 else
-  echo "❌ Package build failed"
-  exit 1
+    echo "❌ Package build failed"
+    exit 1
 fi

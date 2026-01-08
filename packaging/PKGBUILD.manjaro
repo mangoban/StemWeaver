@@ -11,7 +11,8 @@ depends=(python python-pip ffmpeg)
 makedepends=(git python-build python-wheel python-setuptools)
 optdepends=('cuda: GPU acceleration support'
             'nvidia-utils: NVIDIA GPU support'
-            'rocm-opencl-runtime: AMD GPU support')
+            'rocm-opencl-runtime: AMD GPU support'
+            'python-pytorch-cuda: PyTorch with CUDA support')
 source=("${pkgname}::git+${url}.git#tag=v${pkgver}")
 sha256sums=('SKIP')
 
@@ -90,24 +91,8 @@ EOF
   # License and documentation
   install -d "$pkgdir/usr/share/licenses/${pkgname}"
   install -m 644 LICENSE "$pkgdir/usr/share/licenses/${pkgname}/"
+  install -d "$pkgdir/usr/share/doc/${pkgname}"
   install -m 644 README.md "$pkgdir/usr/share/doc/${pkgname}/"
-  
-  # Create desktop database update script
-  install -d "$pkgdir/usr/lib/systemd/system"
-  cat > "$pkgdir/usr/lib/systemd/system/stemweaver-update-db.service" <<'EOF'
-[Unit]
-Description=Update StemWeaver desktop database
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/gtk-update-icon-cache -f /usr/share/icons/hicolor
-ExecStart=/usr/bin/update-desktop-database
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
 }
 
 post_install() {
