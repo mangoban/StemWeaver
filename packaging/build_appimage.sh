@@ -1,102 +1,130 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# build_appimage.sh - minimal script to produce an AppImage using linuxdeploy
-# Requirements (install or download): linuxdeploy, appimagetool, linuxdeploy-plugin-python
-# This is a template and likely needs tuning for PyTorch apps.
+# build_appimage.sh - Build StemWeaver AppImage
+# Creates a self-contained AppImage with all dependencies
 
-APP=UltimateVocalRemover
+APP=StemWeaver
 APPDIR=AppDir
-APPIMAGE=UltimateVocalRemover.AppImage
+APPIMAGE=StemWeaver-v1.1-x86_64.AppImage
 
-if [ ! -d "$APPDIR" ]; then
-  mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
-fi
+echo "Building StemWeaver AppImage..."
 
-# Copy code into AppDir (you can choose to copy only necessary files)
-rsync -a --exclude='.git' --exclude='packaging' . "$APPDIR/usr/share/ultimatevocalremovergui/"
+# Clean previous build
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/share/stemweaver"
 
-# create a launcher script
-cat > "$APPDIR/usr/bin/uvr" <<'EOF'
+# Copy application files
+echo "Copying application files..."
+rsync -a --exclude='.git' --exclude='packaging' --exclude='*.AppImage' --exclude='AppDir' . "$APPDIR/usr/share/stemweaver/"
+
+# Create launcher script
+cat > "$APPDIR/usr/bin/stemweaver" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
-PYHOME="$HERE/../share/ultimatevocalremovergui/venv"
+PYHOME="$HERE/../share/stemweaver/venv"
+export PYTHONPATH="$HERE/../share/stemweaver:$PYTHONPATH"
 if [ -x "$PYHOME/bin/python" ]; then
-  exec "$PYHOME/bin/python" "$HERE/../share/ultimatevocalremovergui/UVR.py" "$@"
+  exec "$PYHOME/bin/python" "$HERE/../share/stemweaver/gui_data/gui_modern_extractor.py" "$@"
 else
-  exec python "$HERE/../share/ultimatevocalremovergui/UVR.py" "$@"
+  exec python3 "$HERE/../share/stemweaver/gui_data/gui_modern_extractor.py" "$@"
 fi
 EOF
-chmod +x "$APPDIR/usr/bin/uvr"
+chmod +x "$APPDIR/usr/bin/stemweaver"
 
-# desktop file
-cat > "$APPDIR/usr/share/applications/universal_sound_extractor.desktop" <<'EOF'
+# Desktop file
+cat > "$APPDIR/usr/share/applications/stemweaver.desktop" <<'EOF'
 [Desktop Entry]
-Name=Universal Sound Extractor
-Exec=uvr
-Icon=universal_sound_extractor
+Name=StemWeaver
+Comment=Professional Audio Stem Separation Tool
+Exec=stemweaver
+Icon=stemweaver
 Type=Application
 Categories=Audio;AudioVideo;
+Terminal=false
 EOF
 
-# copy icon if present
-if [ -f gui_data/img/UVR_v5.6.png ]; then
-  cp gui_data/img/UVR_v5.6.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/universal_sound_extractor.png"
+# Copy icon
+if [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" ]; then
+  cp "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
+elif [ -f "gui_data/img/stemweaver.png" ]; then
+  cp "gui_data/img/stemweaver.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
+else
+  echo "Warning: No icon found, AppImage will have no icon"
 fi
 
-PYENV_PYTHON="$HOME/.pyenv/versions/3.11.9/bin/python3.11"
-if [ -x "$PYENV_PYTHON" ]; then
-  echo "Using pyenv python: $PYENV_PYTHON to create venv"
-  "$PYENV_PYTHON" -m venv "$APPDIR/usr/share/universal_sound_extractor/venv"
-else
-  # Fallback to system python
-  python -m venv "$APPDIR/usr/share/universal_sound_extractor/venv"
-fi
-source "$APPDIR/usr/share/universal_sound_extractor/venv/bin/activate"
+# Create Python virtual environment
+echo "Creating Python virtual environment..."
+python3 -m venv "$APPDIR/usr/share/stemweaver/venv"
+source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
+
+# Upgrade pip
 pip install --upgrade pip setuptools wheel
+
+# Install dependencies
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-if [ -f "$REPO_ROOT/requirements-manjaro.txt" ]; then
-  REQFILE="$REPO_ROOT/requirements-manjaro.txt"
-elif [ -f "$REPO_ROOT/requirements.txt" ]; then
-  REQFILE="$REPO_ROOT/requirements.txt"
+if [ -f "$REPO_ROOT/requirements.txt" ]; then
+  echo "Installing from requirements.txt..."
+  pip install -r "$REPO_ROOT/requirements.txt"
 else
-  echo "No requirements file found in repo root. Exiting."
+  echo "Error: requirements.txt not found at $REPO_ROOT/requirements.txt"
   exit 1
 fi
-pip install -r "$REQFILE"
-# Install CPU-only PyTorch and ONNX Runtime into the AppDir venv to make a full, self-contained AppImage.
-# WARNING: these packages are large (torch wheels are multiple GB) and the install can take a long time.
-pip install "torch" torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install CPU-only PyTorch (required for Demucs)
+echo "Installing PyTorch (CPU version)..."
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install ONNX Runtime (for VR models)
+echo "Installing ONNX Runtime..."
 pip install onnxruntime
-# note: Installing torch inside AppImage may be large and slow. If you want GPU-enabled wheels, install matching CUDA wheels manually.
+
+# Install DearPyGui
+echo "Installing DearPyGui..."
+pip install dearpygui==2.1.1
+
 deactivate
+echo "Virtual environment setup complete."
 
-# Use linuxdeploy to bundle runtime libraries and create AppImage
-# You must have linuxdeploy and appimagetool in PATH, or download their binaries and adjust path here.
-
+# Download linuxdeploy if not present
 TOOLS_DIR="$REPO_ROOT/packaging/tools"
-if [ -f "$TOOLS_DIR/linuxdeploy-x86_64.AppImage" ]; then
-  LINUXDEPLOY="$TOOLS_DIR/linuxdeploy-x86_64.AppImage"
-else
-  LINUXDEPLOY="linuxdeploy"
-fi
-if [ -f "$TOOLS_DIR/appimagetool-x86_64.AppImage" ]; then
-  APPIMAGETOOL="$TOOLS_DIR/appimagetool-x86_64.AppImage"
-else
-  APPIMAGETOOL="appimagetool"
+mkdir -p "$TOOLS_DIR"
+
+if [ ! -f "$TOOLS_DIR/linuxdeploy-x86_64.AppImage" ]; then
+  echo "Downloading linuxdeploy..."
+  wget -q -O "$TOOLS_DIR/linuxdeploy-x86_64.AppImage" \
+    https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+  chmod +x "$TOOLS_DIR/linuxdeploy-x86_64.AppImage"
 fi
 
-if ! command -v "$LINUXDEPLOY" >/dev/null 2>&1 && [ "$LINUXDEPLOY" = "linuxdeploy" ]; then
-  echo "linuxdeploy not found in PATH and no local copy available. Install or download it: https://github.com/linuxdeploy/linuxdeploy"
-  exit 1
-fi
-if ! command -v "$APPIMAGETOOL" >/dev/null 2>&1 && [ "$APPIMAGETOOL" = "appimagetool" ]; then
-  echo "appimagetool not found in PATH and no local copy available. Install or download it: https://github.com/AppImage/AppImageKit/releases"
-  exit 1
+if [ ! -f "$TOOLS_DIR/appimagetool-x86_64.AppImage" ]; then
+  echo "Downloading appimagetool..."
+  wget -q -O "$TOOLS_DIR/appimagetool-x86_64.AppImage" \
+    https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+  chmod +x "$TOOLS_DIR/appimagetool-x86_64.AppImage"
 fi
 
-# run linuxdeploy (this will inspect AppDir and bundle libs)
-"$LINUXDEPLOY" --appdir "$APPDIR" --output appimage --appimage-extract-and-run "$APPIMAGETOOL" || \
-"$LINUXDEPLOY" --appdir "$APPDIR" --output appimage
+LINUXDEPLOY="$TOOLS_DIR/linuxdeploy-x86_64.AppImage"
+APPIMAGETOOL="$TOOLS_DIR/appimagetool-x86_64.AppImage"
 
-echo "If linuxdeploy succeeded, you should have an AppImage in the current directory."
+# Make AppImage executable
+chmod +x "$LINUXDEPLOY" "$APPIMAGETOOL"
+
+# Set AppRun for the AppDir
+cat > "$APPDIR/AppRun" <<'EOF'
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+export PYTHONPATH="$HERE/usr/share/stemweaver:$PYTHONPATH"
+export PATH="$HERE/usr/bin:$PATH"
+exec "$HERE/usr/bin/stemweaver" "$@"
+EOF
+chmod +x "$APPDIR/AppRun"
+
+# Create AppImage using appimagetool
+echo "Creating AppImage..."
+cd "$APPDIR"
+"$APPIMAGETOOL" . "../$APPIMAGE"
+cd ..
+
+echo "✅ AppImage created: $APPIMAGE"
+ls -lh "$APPIMAGE"
