@@ -1,0 +1,297 @@
+name: Build and Release Packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag'
+        required: true
+        default: 'v1.1.0'
+
+jobs:
+  build-docker-package:
+    name: Build Docker Package (GitHub Packages)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-venv patchelf libglib2.0-dev wget
+      
+      - name: Build AppImage
+        run: |
+          chmod +x build_appimage.sh
+          ./build_appimage.sh
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix={{branch}}-
+            latest
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Summary
+        run: |
+          echo "✅ Docker package pushed to GitHub Packages!"
+          echo "📦 ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+          echo ""
+          echo "Users can run:"
+          echo "  docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+          echo "  docker run -v /path/to/audio:/audio ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+
+  build-appimage:
+    name: Build AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-venv patchelf libglib2.0-dev wget
+      
+      - name: Build AppImage
+        run: |
+          chmod +x build_appimage.sh
+          ./build_appimage.sh
+      
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: StemWeaver-v1.1-x86_64.AppImage
+
+  build-deb:
+    name: Build DEB Package
+    runs-on: ubuntu-latest
+    needs: build-appimage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+      
+      - name: Download AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: appimage
+      
+      - name: Build DEB package
+        run: |
+          chmod +x build_deb.sh
+          ./build_deb.sh
+      
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: stemweaver_1.1.0_amd64.deb
+
+  build-rpm:
+    name: Build RPM Package
+    runs-on: ubuntu-latest
+    needs: build-appimage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm-build
+      
+      - name: Download AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: appimage
+      
+      - name: Build RPM package
+        run: |
+          chmod +x build_rpm.sh
+          ./build_rpm.sh
+      
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-package
+          path: stemweaver-1.1.0-1.x86_64.rpm
+
+  build-arch:
+    name: Build Arch Package
+    runs-on: ubuntu-latest
+    needs: build-appimage
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts build-essential
+      
+      - name: Download AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: appimage
+      
+      - name: Build Arch package
+        run: |
+          chmod +x build_arch.sh
+          ./build_arch.sh
+      
+      - name: Upload Arch package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: stemweaver-1.1.0-1-x86_64.pkg.tar.zst
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-appimage, build-deb, build-rpm, build-arch]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: StemWeaver ${{ github.ref_name }}
+          body: |
+            ## 🎵 StemWeaver ${{ github.ref_name }}
+            
+            ### Professional Audio Stem Separation Tool
+            
+            **Features:**
+            - AI-powered stem separation using Meta Demucs
+            - Modern GUI with 5 theme options
+            - CPU/GPU processing support
+            - Multiple extraction profiles (6-stem, 4-stem, vocals-only)
+            - Quality settings 1-5
+            - MP3/FLAC/OGG/WAV support
+            - MIDI export capability
+            - Real-time progress feedback
+            
+            ### 📦 Installation
+            
+            **Universal (All Linux):**
+            ```bash
+            chmod +x StemWeaver-v1.1-x86_64.AppImage
+            ./StemWeaver-v1.1-x86_64.AppImage
+            ```
+            
+            **Debian/Ubuntu:**
+            ```bash
+            sudo dpkg -i stemweaver_1.1.0_amd64.deb
+            sudo apt-get -f install
+            ```
+            
+            **Fedora/RHEL:**
+            ```bash
+            sudo dnf install stemweaver-1.1.0-1.x86_64.rpm
+            ```
+            
+            **Arch/Manjaro:**
+            ```bash
+            sudo pacman -U stemweaver-1.1.0-1-x86_64.pkg.tar.zst
+            ```
+            
+            **Docker (GitHub Packages):**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker run -v /path/to/audio:/audio ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+            
+            ### 📄 License
+            **CC BY 4.0** - Attribution required to bendeb creations
+            
+            ### 💚 Support
+            https://buymeacoffee.com/mangoban
+            
+            ---
+            *All packages built automatically via GitHub Actions*
+          files: |
+            appimage/StemWeaver-v1.1-x86_64.AppImage
+            deb-package/stemweaver_1.1.0_amd64.deb
+            rpm-package/stemweaver-1.1.0-1.x86_64.rpm
+            arch-package/stemweaver-1.1.0-1-x86_64.pkg.tar.zst
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+      
+      - name: Release Summary
+        run: |
+          echo "✅ Release created successfully!"
+          echo "📦 Packages uploaded:"
+          echo "  - AppImage (Universal)"
+          echo "  - DEB (Debian/Ubuntu)"
+          echo "  - RPM (Fedora/RHEL)"
+          echo "  - Arch/Manjaro package"
+          echo ""
+          echo "View at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

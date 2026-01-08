@@ -45,17 +45,18 @@ Terminal=false
 EOF
 
 # Copy icon
-if [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" ]; then
-  cp "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
-elif [ -f "gui_data/img/stemweaver.png" ]; then
-  cp "gui_data/img/stemweaver.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
+if [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/GUI-Icon.png" ]; then
+  cp "$APPDIR/usr/share/stemweaver/gui_data/img/GUI-Icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
+elif [ -f "gui_data/img/GUI-Icon.png" ]; then
+  cp "gui_data/img/GUI-Icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
 else
   echo "Warning: No icon found, AppImage will have no icon"
 fi
 
 # Create Python virtual environment
 echo "Creating Python virtual environment..."
-python3 -m venv "$APPDIR/usr/share/stemweaver/venv"
+source myenv/bin/activate
+python -m venv "$APPDIR/usr/share/stemweaver/venv"
 source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
 
 # Upgrade pip
@@ -155,8 +156,8 @@ fi
 if [ -f "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png" ]; then
   cp "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png" "$APPDIR/"
   echo "Copied icon file to AppDir root for compatibility"
-elif [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" ]; then
-  cp "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" "$APPDIR/stemweaver.png"
+elif [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/GUI-Icon.png" ]; then
+  cp "$APPDIR/usr/share/stemweaver/gui_data/img/GUI-Icon.png" "$APPDIR/stemweaver.png"
   echo "Copied icon file from gui_data to AppDir root for compatibility"
 fi
 

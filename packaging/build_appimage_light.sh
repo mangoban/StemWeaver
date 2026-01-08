@@ -10,27 +10,27 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 # Copy app code (exclude large model files)
-rsync -a --exclude='.git' --exclude='packaging' --exclude='models' . "$APPDIR/usr/share/ultimatevocalremovergui/"
+rsync -a --exclude='.git' --exclude='packaging' --exclude='models' . "$APPDIR/usr/share/stemweaver/"
 
 # Create launcher
-cat > "$APPDIR/usr/bin/uvr" <<'EOF'
-#!/bin/sh
+cat > "$APPDIR/usr/bin/stemweaver" <<'EOF'
+#!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
-PYHOME="$HERE/../share/ultimatevocalremovergui/venv"
-if [ -x "$PYHOME/bin/python" ]; then
-  exec "$PYHOME/bin/python" "$HERE/../share/ultimatevocalremovergui/UVR.py" "$@"
+PYHOME="$HERE/../share/stemweaver/venv"
+if [ -d "$PYHOME" ]; then
+  exec "$PYHOME/bin/python" "$HERE/../share/stemweaver/gui_data/gui_modern_extractor.py" "$@"
 else
-  exec python "$HERE/../share/ultimatevocalremovergui/UVR.py" "$@"
+  exec python "$HERE/../share/stemweaver/gui_data/gui_modern_extractor.py" "$@"
 fi
 EOF
-chmod +x "$APPDIR/usr/bin/uvr"
+chmod +x "$APPDIR/usr/bin/stemweaver"
 
 # Desktop file
-cat > "$APPDIR/usr/share/applications/ultimatevocalremovergui.desktop" <<'EOF'
+cat > "$APPDIR/usr/share/applications/stemweaver.desktop" <<'EOF'
 [Desktop Entry]
-Name=Universal Sound Extractor (Light)
-Exec=uvr
-Icon=ultimatevocalremovergui
+Name=StemWeaver (Light)
+Exec=stemweaver
+Icon=stemweaver
 Type=Application
 Categories=Audio;AudioVideo;
 EOF
@@ -40,15 +40,15 @@ PYTHON="/home/bendeb/.pyenv/versions/3.11.9/bin/python3.11"
 if [ ! -x "$PYTHON" ]; then
   PYTHON=python3
 fi
-$PYTHON -m venv "$APPDIR/usr/share/ultimatevocalremovergui/venv"
-source "$APPDIR/usr/share/ultimatevocalremovergui/venv/bin/activate"
+$PYTHON -m venv "$APPDIR/usr/share/stemweaver/venv"
+source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
 pip install -r "$REPO_ROOT/packaging/requirements-light.txt"
 deactivate
 
 # Copy icon if available
-if [ -f "$REPO_ROOT/gui_data/img/UVR_v5.6.png" ]; then
-  cp "$REPO_ROOT/gui_data/img/UVR_v5.6.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/ultimatevocalremovergui.png"
+if [ -f "$REPO_ROOT/gui_data/img/StemWeaver.png" ]; then
+  cp "$REPO_ROOT/gui_data/img/StemWeaver.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png"
 fi
 
 # Run linuxdeploy to create AppImage using local tools if available

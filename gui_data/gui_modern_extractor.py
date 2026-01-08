@@ -62,6 +62,8 @@ except ImportError:
         EXIT = "Exit"
         STOP = "Stop"
         CLEAR = "Clear"
+        ANALYZE = "🔍 Analyze"
+        APPLY = "✅ Apply"
     class IconText:
         FILE_SELECTION = "File Selection"
         SETTINGS = "Settings"
@@ -495,18 +497,36 @@ class StemWeaverGUI:
                     )
                     dpg.add_text("(Best for: Vocals, Bass, Piano, Guitar)", color=(120, 120, 130, 255))
                     
+                    # Denoising options
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("Post-Processing:", color=(255, 100, 150, 255))
+                    dpg.add_checkbox(
+                        label="Apply Denoising",
+                        tag="apply_denoising",
+                        default_value=True
+                    )
+                    dpg.add_slider_float(
+                        label="Denoise Level",
+                        tag="denoise_level",
+                        min_value=0.0,
+                        max_value=0.5,
+                        default_value=0.1,
+                        width=180
+                    )
+                    dpg.add_text("(0=off, 0.1=light, 0.3=strong)", color=(120, 120, 130, 255))
+                    
                     dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
                         dpg.add_button(
-                            label="🔍 Analyze Track",
+                            label="  [ANALYZE]  ",
                             callback=self.analyze_track,
-                            width=130, height=28
+                            width=150, height=32
                         )
                         dpg.add_spacer(width=10)
                         dpg.add_button(
-                            label="✓ Apply Recommendation",
+                            label="  [APPLY]  ",
                             callback=self.apply_recommendation,
-                            width=170, height=28
+                            width=190, height=32
                         )
                     
                     dpg.add_spacer(height=15)
@@ -1156,6 +1176,14 @@ class StemWeaverGUI:
                     try:
                         file_ext = os.path.splitext(audio_file)[1].lower()
                         self.log(f"  Loading audio ({file_ext.upper()})...")
+                        # Handle large files (>500MB) with ffmpeg conversion first
+                        file_size_mb = os.path.getsize(audio_file) / (1024*1024)
+                        if file_size_mb > 500:
+                            self.log(f"  [LARGE FILE] Converting {file_size_mb:.1f}MB file to WAV first...")
+                            temp_wav = os.path.join(file_dir, f"_temp_{name_no_ext}.wav")
+                            subprocess.run(['ffmpeg', '-i', audio_file, '-y', '-loglevel', 'error', temp_wav])
+                            audio_file = temp_wav
+                        
                         # Try loading with stereo first
                         audio_np, sample_rate = librosa.load(audio_file, sr=None, mono=False)
                         self.log(f"  ✓ Audio loaded: {audio_np.shape} @ {sample_rate}Hz")
@@ -1171,52 +1199,58 @@ class StemWeaverGUI:
                         waveform = torch.from_numpy(audio_np).float()
                         
                     except Exception as load_err:
-                        self.log(f"  [ERROR] Cannot load audio: {type(load_err).__name__}")
-                        self.log(f"  Details: {str(load_err)[:100]}")
+                        self.log(f"  [ERROR] Initial load failed: {str(load_err)}")
+                        self.log(f"  [DEBUG] Attempting ffmpeg conversion...")
                         
-                        # Try fallback: load mono first then convert
+                        # Try converting via ffmpeg with detailed error reporting
                         try:
-                            self.log(f"  Trying fallback (mono load)...")
-                            audio_np, sample_rate = librosa.load(audio_file, sr=None, mono=True)
-                            audio_np = np.stack([audio_np, audio_np])
-                            waveform = torch.from_numpy(audio_np).float()
-                            self.log(f"  ✓ Loaded with fallback")
-                        except Exception as fallback_err:
-                            # Last resort: try converting MP3/OGG to WAV using ffmpeg
                             file_ext = os.path.splitext(audio_file)[1].lower()
                             if file_ext in ['.mp3', '.ogg', '.m4a', '.flac']:
-                                try:
-                                    self.log(f"  [AUTO] Attempting format conversion using ffmpeg...")
-                                    temp_wav = os.path.join(file_dir, f"_temp_{name_no_ext}.wav")
+                                temp_wav = os.path.join(file_dir, f"_temp_{name_no_ext}.wav")
+                                self.log(f"  [AUTO] Converting {file_ext} to WAV using ffmpeg...")
+                                
+                                result = subprocess.run(
+                                    ['ffmpeg', '-i', audio_file, '-y',
+                                     '-loglevel', 'verbose',
+                                     '-acodec', 'pcm_s16le',
+                                     '-ar', '44100',
+                                     temp_wav],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=60
+                                )
+                                
+                                if result.returncode != 0:
+                                    self.log(f"  [FFMPEG ERROR] Exit code: {result.returncode}")
+                                    self.log(f"  [FFMPEG STDERR] {result.stderr[:500]}")
+                                    raise RuntimeError("FFmpeg conversion failed")
                                     
-                                    # Convert to WAV
-                                    result = subprocess.run(
-                                        ['ffmpeg', '-i', audio_file, '-y', '-loglevel', 'error', temp_wav],
-                                        capture_output=True, timeout=60
-                                    )
+                                if not os.path.exists(temp_wav):
+                                    raise FileNotFoundError("FFmpeg output file missing")
                                     
-                                    if result.returncode == 0 and os.path.exists(temp_wav):
-                                        self.log(f"  ✓ Converted {file_ext} to WAV")
-                                        # Load the converted WAV
-                                        audio_np, sample_rate = librosa.load(temp_wav, sr=None, mono=False)
-                                        if audio_np.ndim == 1:
-                                            audio_np = np.stack([audio_np, audio_np])
-                                        waveform = torch.from_numpy(audio_np).float()
-                                        self.log(f"  ✓ Loaded from converted WAV")
-                                    else:
-                                        self.log(f"  [ERROR] ffmpeg conversion failed")
-                                        self.log(f"  [TIP] Try manually: ffmpeg -i input.mp3 output.wav")
-                                        files_failed += 1
-                                        continue
-                                except Exception as convert_err:
-                                    self.log(f"  [ERROR] ffmpeg not available or conversion failed")
-                                    self.log(f"  [TIP] Install ffmpeg: sudo apt-get install ffmpeg")
-                                    files_failed += 1
-                                    continue
+                                # Verify converted file
+                                audio_np, sample_rate = librosa.load(temp_wav, sr=None, mono=False)
+                                self.log(f"  ✓ Converted via ffmpeg successfully")
+                                
+                                # Handle mono vs stereo
+                                if audio_np.ndim == 1:
+                                    audio_np = np.stack([audio_np, audio_np])
+                                elif audio_np.ndim == 2 and audio_np.shape[0] > 2:
+                                    audio_np = audio_np[:2, :]
+                                
+                                waveform = torch.from_numpy(audio_np).float()
                             else:
-                                self.log(f"  [ERROR] File may be corrupted or unsupported format")
-                                files_failed += 1
-                                continue
+                                raise RuntimeError(f"Unsupported format: {file_ext}")
+                                
+                        except Exception as conv_err:
+                            self.log(f"  [CRITICAL] Conversion failed: {str(conv_err)}")
+                            if 'temp_wav' in locals() and temp_wav and os.path.exists(temp_wav):
+                                try:
+                                    os.remove(temp_wav)
+                                except:
+                                    pass
+                            files_failed += 1
+                            continue
                     
                     original_sr = sample_rate
                     
@@ -1349,7 +1383,7 @@ class StemWeaverGUI:
                                         try:
                                             chunk_result = apply_model(
                                                 ens_model, chunk, device=device,
-                                                shifts=0, overlap=0.2, segment=None, progress=False
+                                                shifts=0, overlap=0.1, segment=None, progress=False
                                             )
                                             chunk_sources.append(chunk_result)
                                         except:
@@ -1363,8 +1397,8 @@ class StemWeaverGUI:
                                         
                                         # Check if all chunks have same dimensions except time
                                         shapes = [c.shape for c in chunk_sources]
-                                        batch_dims = [(s[0], s[1]) for s in shapes]
-                                        time_dims = [s[2] for s in shapes]
+                                        batch_dims = [(s[0], s[1], s[2]) for s in shapes]  # Include all dims except time
+                                        time_dims = [s[-1] for s in shapes]  # Time is last dimension
                                         
                                         if len(set(batch_dims)) > 1:
                                             self.log(f"  [CHUNK ERROR] Inconsistent batch/channel dims: {set(batch_dims)}")
@@ -1379,8 +1413,8 @@ class StemWeaverGUI:
                                         
                                         padded_chunks = []
                                         for chunk in chunk_sources:
-                                            if chunk.shape[2] < max_size:
-                                                pad_size = max_size - chunk.shape[2]
+                                            if chunk.shape[-1] < max_size:  # Check last dimension (time)
+                                                pad_size = max_size - chunk.shape[-1]
                                                 padded = torch.nn.functional.pad(chunk, (0, pad_size))
                                                 padded_chunks.append(padded)
                                             else:
@@ -1392,7 +1426,7 @@ class StemWeaverGUI:
                                             self.log(f"  [CHUNK ERROR] Padded chunks still have different shapes: {set(padded_shapes)}")
                                             raise RuntimeError("Padding failed to equalize chunk sizes")
                                         
-                                        sources = torch.cat(padded_chunks, dim=2)
+                                        sources = torch.cat(padded_chunks, dim=-1)  # Concatenate along last dimension
                                         self.log(f"  [CHUNK] Combined {len(chunk_sources)} chunks")
                                     else:
                                         raise
@@ -1452,8 +1486,8 @@ class StemWeaverGUI:
                                     
                                     # Check if all chunks have same dimensions except time
                                     shapes = [c.shape for c in chunk_sources]
-                                    batch_dims = [(s[0], s[1]) for s in shapes]
-                                    time_dims = [s[2] for s in shapes]
+                                    batch_dims = [(s[0], s[1], s[2]) for s in shapes]  # Include all dims except time
+                                    time_dims = [s[-1] for s in shapes]  # Time is last dimension
                                     
                                     if len(set(batch_dims)) > 1:
                                         self.log(f"  [CHUNK ERROR] Inconsistent batch/channel dims: {set(batch_dims)}")
@@ -1468,9 +1502,9 @@ class StemWeaverGUI:
                                     
                                     padded_chunks = []
                                     for chunk in chunk_sources:
-                                        if chunk.shape[2] < max_size:
-                                            # Pad with zeros
-                                            pad_size = max_size - chunk.shape[2]
+                                        if chunk.shape[-1] < max_size:  # Check last dimension (time)
+                                            # Pad with zeros on the last dimension
+                                            pad_size = max_size - chunk.shape[-1]
                                             padded = torch.nn.functional.pad(chunk, (0, pad_size))
                                             padded_chunks.append(padded)
                                         else:
@@ -1482,8 +1516,8 @@ class StemWeaverGUI:
                                         self.log(f"  [CHUNK ERROR] Padded chunks still have different shapes: {set(padded_shapes)}")
                                         raise RuntimeError("Padding failed to equalize chunk sizes")
                                     
-                                    # Concatenate along time dimension (dim=2)
-                                    sources = torch.cat(padded_chunks, dim=2)
+                                    # Concatenate along time dimension (dim=-1, last dimension)
+                                    sources = torch.cat(padded_chunks, dim=-1)
                                     self.log(f"  [CHUNK] Combined {len(chunk_sources)} chunks into shape {sources.shape}")
                                 else:
                                     raise RuntimeError("All chunks failed")
@@ -1530,8 +1564,8 @@ class StemWeaverGUI:
                                             
                                             # Check if all chunks have same dimensions except time
                                             shapes = [c.shape for c in chunk_sources]
-                                            batch_dims = [(s[0], s[1]) for s in shapes]
-                                            time_dims = [s[2] for s in shapes]
+                                            batch_dims = [(s[0], s[1], s[2]) for s in shapes]  # Include all dims except time
+                                            time_dims = [s[-1] for s in shapes]  # Time is last dimension
                                             
                                             if len(set(batch_dims)) > 1:
                                                 self.log(f"  [CHUNK ERROR] Inconsistent batch/channel dims: {set(batch_dims)}")
@@ -1546,8 +1580,8 @@ class StemWeaverGUI:
                                             
                                             padded_chunks = []
                                             for chunk in chunk_sources:
-                                                if chunk.shape[2] < max_size:
-                                                    pad_size = max_size - chunk.shape[2]
+                                                if chunk.shape[-1] < max_size:  # Check last dimension (time)
+                                                    pad_size = max_size - chunk.shape[-1]
                                                     padded = torch.nn.functional.pad(chunk, (0, pad_size))
                                                     padded_chunks.append(padded)
                                                 else:
@@ -1559,7 +1593,7 @@ class StemWeaverGUI:
                                                 self.log(f"  [CHUNK ERROR] Padded chunks still have different shapes: {set(padded_shapes)}")
                                                 raise RuntimeError("Padding failed to equalize chunk sizes")
                                             
-                                            sources = torch.cat(padded_chunks, dim=2)
+                                            sources = torch.cat(padded_chunks, dim=-1)  # Concatenate along last dimension
                                             self.log(f"  [CHUNK] Combined {len(chunk_sources)} chunks")
                                         else:
                                             raise
@@ -1626,8 +1660,19 @@ class StemWeaverGUI:
                                     self.log(f"  ✓ {stem}.wav ({file_size:.0f} KB)")
                                     stems_saved += 1
                                     
+                                    # Apply denoising if enabled
+                                    if dpg.get_value("apply_denoising"):
+                                        denoise_level = dpg.get_value("denoise_level")
+                                        if denoise_level > 0:
+                                            self.log(f"  [DENOISE] Cleaning {stem}.wav (level {denoise_level:.2f})...")
+                                            temp_clean = os.path.join(file_dir, f"{name_no_ext}_{stem}_clean.wav")
+                                            if self.apply_denoising(stem_file, temp_clean, denoise_level):
+                                                os.remove(stem_file)
+                                                os.rename(temp_clean, stem_file)
+                                                self.log(f"  ✓ {stem}.wav denoised")
+                                    
                                     # Export as MIDI if requested
-                                    if export_midi and stem.lower() in ['vocals', 'bass', 'piano', 'guitar', 'drums']:
+                                    if dpg.get_value("export_midi") and stem.lower() in ['vocals', 'bass', 'piano', 'guitar', 'drums']:
                                         midi_file = os.path.join(file_dir, f"{name_no_ext}_{stem}.mid")
                                         if self.audio_to_midi(stem_file, midi_file, stem.lower()):
                                             self.log(f"  ♪ {stem}.mid exported")
@@ -1749,7 +1794,58 @@ class StemWeaverGUI:
         else:
             self.log("[*] Not currently processing")
     
-    def audio_to_midi(self, audio_file, output_midi, stem_type="vocals"):
+    def apply_denoising(self, input_file, output_file, denoise_level=0.1):
+        """
+        Apply noise reduction to audio file using spectral gating
+        """
+        try:
+            import librosa
+            import soundfile as sf
+            import numpy as np
+            
+            # Load audio
+            y, sr = librosa.load(input_file, sr=None, mono=False)
+            
+            # Apply spectral gating (noise reduction)
+            if denoise_level > 0:
+                # Calculate threshold based on denoise level
+                threshold = np.percentile(np.abs(y), 100 * (1 - denoise_level))
+                
+                # Create mask for signal above threshold
+                mask = np.abs(y) > threshold
+                
+                # Apply mask
+                y_clean = y * mask.astype(float)
+                
+                # Preserve some original signal to avoid artifacts
+                if denoise_level < 0.3:
+                    y_clean = y_clean * (1 - denoise_level) + y * denoise_level
+            else:
+                y_clean = y
+            
+            # Save cleaned file
+            sf.write(output_file, y_clean.T, sr)
+            return True
+            
+        except Exception as e:
+            self.log(f"  [DENOISE ERROR] {str(e)}")
+            return False
+    
+    def ffmpeg_denoise(self, input_file, output_file, level=0.1):
+        """Use FFmpeg's afftdn filter for noise reduction"""
+        try:
+            nr = int(level * 100)  # 0-100 range
+            
+            cmd = [
+                'ffmpeg', '-i', input_file,
+                '-af', f'afftdn=nf={nr}',
+                '-y', output_file
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=60)
+            return result.returncode == 0
+        except:
+            return False
         """Convert audio stem to MIDI using pitch detection
         
         Args:

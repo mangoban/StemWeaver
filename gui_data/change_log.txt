@@ -10,7 +10,7 @@ Most Recent Changes:
 ~ Added Mixer Mode for Demucs.
     ~ This option may improve separation for some 4-stem models.
 
-Fixes & Changes going from UVR v5.4 to v5.5:
+Fixes & Changes going from StemWeaver v1.0 to v1.1:
 
 ~ The progress bar is now fully synced up with every process in the application.
 ~ Fixed low-resolution icon.

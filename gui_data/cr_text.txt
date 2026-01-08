@@ -6,13 +6,13 @@ Invite Link: https://discord.gg/KJ7jfPa5Qp
 
 Most Recent Changes:
 
-Patch UVR_Patch_10_6_23_4_27:
+Patch SW_Patch_10_6_23_4_27:
 ~ MPS for MacOS is now compatible with all MDX-Net & VR Arch models!
 ~ Fixed memory issue with MDX23C models.
 ~ Added the ability to choose GPU device to process tracks.
 ~ Fixed a few graphical bugs.
 
-Patch UVR_Patch_1_15_25_22_30_BETA:
+Patch SW_Patch_1_15_25_22_30_BETA:
 ~ Tools and Functionalities:
   ~ Phase Swapper Tool: Applies the phase of the reference audio to the target audio.
   ~ Apollo Restore Tool: Restores audio quality by addressing distortions and artifacts 
@@ -27,7 +27,7 @@ Patch UVR_Patch_1_15_25_22_30_BETA:
   ~ Significantly enhanced the model configuration menu:
     ~ Configure settings for multiple models simultaneously.
     ~ Edit YAML configurations directly within the GUI.
-  ~ Introduced aliasing for models, allowing users to rename models within UVR without changing
+  ~ Introduced aliasing for models, allowing users to rename models within StemWeaver without changing
     file names (aliases must fit within the dropdown for a clean interface).
   ~ Improved the "Change Model Settings" menu to auto-populate existing settings, simplifying
     reviews and adjustments.
@@ -82,12 +82,12 @@ Contribution:
 ~ Conducted thorough testing and produced detailed tutorials on SDR evaluation.
 ~ Implemented systematic SDR quality assessments.
 ~ Authored Google Document detailing the optimal models for each genre.
-~ Authored Google Document capturing UVR frequency cutoffs and time-elapsed comparisons between GPU and CPU performances.
+~ Authored Google Document capturing StemWeaver frequency cutoffs and time-elapsed comparisons between GPU and CPU performances.
 ~ Authored a Google Document consolidating best practices, tips, and tricks.
 
 Resources:
 ~ SDR Per Genre Breakdown
-~ UVR Model Frequency Cutoff Chart
+~ StemWeaver Model Frequency Cutoff Chart
 ~ Tips & Tricks
 ~ Link: (See "Discord Resources Link" below)
 ----------------------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ deton24
 Contribution:
 ~ SDR quality checks.
 ~ Authored a Google Document that serves as an all-in-one guide to source separation.
-~ A big thank you to for consistently helping address issues in the official UVR repo.
+~ A big thank you to for consistently helping address issues in the official StemWeaver repo.
 
 Resources:
 ~ All-in-One Source Separation Guide

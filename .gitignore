@@ -19,6 +19,7 @@ lib_v5/vr_network/modelparams/
 
 # AppImage and binaries
 *.AppImage
+*.7z
 AppDir/
 !AppDir/stemweaver.desktop
 !AppDir/stemweaver.svg
