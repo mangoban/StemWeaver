@@ -151,6 +151,15 @@ if [ -f "$APPDIR/usr/share/applications/stemweaver.desktop" ]; then
   echo "Copied desktop file to AppDir root for compatibility"
 fi
 
+# Copy icon file to AppDir root for extracted appimagetool compatibility
+if [ -f "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png" ]; then
+  cp "$APPDIR/usr/share/icons/hicolor/256x256/apps/stemweaver.png" "$APPDIR/"
+  echo "Copied icon file to AppDir root for compatibility"
+elif [ -f "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" ]; then
+  cp "$APPDIR/usr/share/stemweaver/gui_data/img/stemweaver.png" "$APPDIR/stemweaver.png"
+  echo "Copied icon file from gui_data to AppDir root for compatibility"
+fi
+
 # Create AppImage using appimagetool
 echo "Creating AppImage..."
 cd "$APPDIR"
