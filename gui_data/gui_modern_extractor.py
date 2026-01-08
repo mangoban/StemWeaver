@@ -509,11 +509,11 @@ class StemWeaverGUI:
                         label="Denoise Level",
                         tag="denoise_level",
                         min_value=0.0,
-                        max_value=0.5,
-                        default_value=0.1,
+                        max_value=0.3,
+                        default_value=0.08,
                         width=180
                     )
-                    dpg.add_text("(0=off, 0.1=light, 0.3=strong)", color=(120, 120, 130, 255))
+                    dpg.add_text("(0=off, 0.08=light, 0.2=strong)", color=(120, 120, 130, 255))
                     
                     dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
@@ -1670,12 +1670,16 @@ class StemWeaverGUI:
                                                 os.remove(stem_file)
                                                 os.rename(temp_clean, stem_file)
                                                 self.log(f"  ✓ {stem}.wav denoised")
+                                            else:
+                                                self.log(f"  [WARN] Denoising failed, keeping original")
                                     
                                     # Export as MIDI if requested
                                     if dpg.get_value("export_midi") and stem.lower() in ['vocals', 'bass', 'piano', 'guitar', 'drums']:
                                         midi_file = os.path.join(file_dir, f"{name_no_ext}_{stem}.mid")
                                         if self.audio_to_midi(stem_file, midi_file, stem.lower()):
                                             self.log(f"  ♪ {stem}.mid exported")
+                                        else:
+                                            self.log(f"  [WARN] MIDI export failed for {stem}")
                                         
                                 else:
                                     self.log(f"  [WARN] {stem}.wav is too small")
@@ -1794,9 +1798,10 @@ class StemWeaverGUI:
         else:
             self.log("[*] Not currently processing")
     
-    def apply_denoising(self, input_file, output_file, denoise_level=0.1):
+    def apply_denoising(self, input_file, output_file, denoise_level=0.08):
         """
         Apply noise reduction to audio file using spectral gating
+        denoise_level: 0.0-0.3 (0=off, 0.08=light, 0.2=strong)
         """
         try:
             import librosa
@@ -1809,6 +1814,7 @@ class StemWeaverGUI:
             # Apply spectral gating (noise reduction)
             if denoise_level > 0:
                 # Calculate threshold based on denoise level
+                # Lower level = more aggressive noise removal
                 threshold = np.percentile(np.abs(y), 100 * (1 - denoise_level))
                 
                 # Create mask for signal above threshold
@@ -1817,9 +1823,14 @@ class StemWeaverGUI:
                 # Apply mask
                 y_clean = y * mask.astype(float)
                 
-                # Preserve some original signal to avoid artifacts
-                if denoise_level < 0.3:
-                    y_clean = y_clean * (1 - denoise_level) + y * denoise_level
+                # Preserve transients by mixing back some original
+                # This prevents the "underwater" sound from over-denoising
+                if denoise_level < 0.15:
+                    y_clean = y_clean * 0.7 + y * 0.3
+                elif denoise_level < 0.25:
+                    y_clean = y_clean * 0.5 + y * 0.5
+                else:
+                    y_clean = y_clean * 0.3 + y * 0.7
             else:
                 y_clean = y
             
@@ -2111,6 +2122,271 @@ class StemWeaverGUI:
         
         return harmonic_out, percussive_out
     
+    def audio_to_midi(self, audio_file, output_midi, stem_type="vocals"):
+        """Convert audio stem to MIDI using pitch detection
+        
+        Args:
+            audio_file: Path to WAV file
+            output_midi: Path for output MIDI file
+            stem_type: Type of stem (vocals, bass, piano, guitar, drums)
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not HAS_MIDI:
+            self.log("  [WARN] MIDI export not available - install pretty_midi midiutil")
+            return False
+        
+        try:
+            # Load audio
+            y, sr = librosa.load(audio_file, sr=22050, mono=True)
+            
+            if stem_type == "drums":
+                # For drums, use onset detection
+                return self._drums_to_midi(y, sr, output_midi)
+            else:
+                # For melodic instruments, use pitch detection
+                return self._melodic_to_midi(y, sr, output_midi, stem_type)
+                
+        except Exception as e:
+            self.log(f"  [ERROR] MIDI conversion failed: {str(e)[:50]}")
+            return False
+    
+    def _melodic_to_midi(self, y, sr, output_midi, stem_type):
+        """Convert melodic audio to MIDI using pitch detection"""
+        try:
+            # Use librosa's piptrack for pitch detection
+            # This works well for monophonic or mostly-monophonic sources
+            hop_length = 512
+            fmin = 50 if stem_type == "bass" else 80
+            fmax = 500 if stem_type == "bass" else 2000
+            
+            # Get pitches and magnitudes
+            pitches, magnitudes = librosa.piptrack(
+                y=y, sr=sr, 
+                hop_length=hop_length,
+                fmin=fmin, fmax=fmax,
+                threshold=0.1
+            )
+            
+            # Get onset frames for note segmentation
+            onset_frames = librosa.onset.onset_detect(
+                y=y, sr=sr, hop_length=hop_length, 
+                backtrack=True
+            )
+            
+            if len(onset_frames) == 0:
+                self.log(f"  [WARN] No notes detected in audio")
+                return False
+            
+            # Create MIDI file
+            midi = MIDIFile(1)  # One track
+            track = 0
+            channel = 0
+            time = 0
+            tempo = 120  # BPM
+            volume = 100
+            
+            midi.addTrackName(track, time, f"StemWeaver - {stem_type}")
+            midi.addTempo(track, time, tempo)
+            
+            # Set instrument based on stem type
+            instruments = {
+                "vocals": 52,   # Choir Aahs
+                "bass": 33,     # Electric Bass (finger)
+                "piano": 0,     # Acoustic Grand Piano
+                "guitar": 25,   # Acoustic Guitar (steel)
+                "other": 48     # String Ensemble
+            }
+            program = instruments.get(stem_type, 0)
+            midi.addProgramChange(track, channel, time, program)
+            
+            # Convert frames to time
+            times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop_length)
+            
+            notes_added = 0
+            for i, onset in enumerate(onset_frames):
+                # Get the pitch at this onset
+                pitch_idx = magnitudes[:, onset].argmax()
+                pitch = pitches[pitch_idx, onset]
+                
+                if pitch > 0:
+                    # Convert Hz to MIDI note number
+                    midi_note = int(round(librosa.hz_to_midi(pitch)))
+                    midi_note = max(21, min(108, midi_note))  # Clamp to piano range
+                    
+                    # Calculate note duration
+                    if i < len(onset_frames) - 1:
+                        duration = times[i + 1] - times[i]
+                    else:
+                        duration = 0.5  # Default duration for last note
+                    
+                    duration = max(0.1, min(duration, 4.0))  # Clamp duration
+                    
+                    # Convert to beats
+                    start_beat = times[i] * (tempo / 60)
+                    duration_beats = duration * (tempo / 60)
+                    
+                    midi.addNote(track, channel, midi_note, start_beat, duration_beats, volume)
+                    notes_added += 1
+            
+            if notes_added > 0:
+                # Write MIDI file
+                with open(output_midi, 'wb') as f:
+                    midi.writeFile(f)
+                return True
+            else:
+                self.log(f"  [WARN] No valid notes detected")
+                return False
+                
+        except Exception as e:
+            self.log(f"  [ERROR] Melodic MIDI conversion: {str(e)[:40]}")
+            return False
+    
+    def _drums_to_midi(self, y, sr, output_midi):
+        """Convert drum audio to MIDI using onset detection"""
+        try:
+            hop_length = 512
+            
+            # Detect onsets
+            onset_frames = librosa.onset.onset_detect(
+                y=y, sr=sr, hop_length=hop_length,
+                units='frames'
+            )
+            
+            if len(onset_frames) == 0:
+                self.log(f"  [WARN] No drum hits detected")
+                return False
+            
+            onset_times = librosa.frames_to_time(onset_frames, sr=sr, hop_length=hop_length)
+            
+            # Create MIDI file
+            midi = MIDIFile(1)
+            track = 0
+            channel = 9  # Drums channel
+            time = 0
+            tempo = 120
+            volume = 100
+            
+            midi.addTrackName(track, time, "StemWeaver - Drums")
+            midi.addTempo(track, time, tempo)
+            
+            # Simple drum mapping - use kick as default
+            # In a more advanced version, we'd classify each hit
+            kick = 36
+            snare = 38
+            hihat = 42
+            
+            # Alternate between kick and snare for basic pattern
+            for i, onset_time in enumerate(onset_times):
+                start_beat = onset_time * (tempo / 60)
+                duration = 0.25  # Short hit
+                
+                # Simple pattern: alternate kick/snare
+                note = kick if i % 2 == 0 else snare
+                midi.addNote(track, channel, note, start_beat, duration, volume)
+            
+            # Write MIDI file
+            with open(output_midi, 'wb') as f:
+                midi.writeFile(f)
+            
+            return True
+            
+        except Exception as e:
+            self.log(f"  [ERROR] Drum MIDI conversion: {str(e)[:40]}")
+            return False
+    
+    def _compute_stft(self, audio, n_fft, hop_length):
+        """Compute Short-Time Fourier Transform - FAST vectorized version"""
+        # Pad audio to ensure we have enough samples
+        pad_length = n_fft // 2
+        audio_padded = np.pad(audio, (pad_length, pad_length), mode='reflect')
+        
+        # Calculate number of frames
+        num_frames = 1 + (len(audio_padded) - n_fft) // hop_length
+        
+        # Create frame indices
+        frame_indices = np.arange(num_frames) * hop_length
+        sample_indices = np.arange(n_fft)
+        
+        # Extract all frames at once using advanced indexing
+        indices = frame_indices[:, np.newaxis] + sample_indices[np.newaxis, :]
+        frames = audio_padded[indices]  # Shape: (num_frames, n_fft)
+        
+        # Apply Hann window
+        window = np.hanning(n_fft)
+        frames = frames * window
+        
+        # Compute FFT for all frames at once
+        stft_matrix = np.fft.rfft(frames, axis=1).T  # Shape: (n_fft//2+1, num_frames)
+        
+        return stft_matrix
+    
+    def _istft(self, stft_matrix, n_fft, hop_length, length):
+        """Compute Inverse STFT - FAST vectorized version"""
+        num_frames = stft_matrix.shape[1]
+        window = np.hanning(n_fft)
+        
+        # Compute all inverse FFTs at once
+        frames = np.fft.irfft(stft_matrix.T, n=n_fft, axis=1)  # Shape: (num_frames, n_fft)
+        frames = frames * window
+        
+        # Pre-allocate output
+        output_length = (num_frames - 1) * hop_length + n_fft
+        audio = np.zeros(output_length)
+        window_sum = np.zeros(output_length)
+        
+        # Overlap-add
+        for t in range(num_frames):
+            start = t * hop_length
+            end = start + n_fft
+            audio[start:end] += frames[t]
+            window_sum[start:end] += window
+        
+        # Normalize
+        window_sum[window_sum < 1e-8] = 1.0
+        audio = audio / window_sum
+        
+        # Trim to original length
+        pad_length = n_fft // 2
+        audio = audio[pad_length:pad_length + length]
+        
+        return audio
+    
+    def _harmonic_percussive_separation(self, magnitude, n_fft, kernel_size=31):
+        """Separate harmonic/percussive - FAST vectorized version"""
+        from scipy.ndimage import median_filter
+        
+        # Use scipy's median_filter for fast computation
+        # If scipy not available, use simplified method
+        try:
+            # Harmonic: smooth along time axis (horizontal)
+            harmonic_mag = median_filter(magnitude, size=(1, 3), mode='reflect')
+            
+            # Percussive: smooth along frequency axis (vertical)
+            percussive_mag = median_filter(magnitude, size=(3, 1), mode='reflect')
+            
+        except ImportError:
+            # Fallback: simple average-based separation
+            harmonic_mag = magnitude.copy()
+            percussive_mag = magnitude.copy()
+            
+            # Simplified time smoothing for harmonic
+            harmonic_mag[:, 1:-1] = (magnitude[:, :-2] + magnitude[:, 1:-1] + magnitude[:, 2:]) / 3
+            
+            # Simplified frequency smoothing for percussive
+            percussive_mag[1:-1, :] = (magnitude[:-2, :] + magnitude[1:-1, :] + magnitude[2:, :]) / 3
+        
+        # Create soft masks
+        total = harmonic_mag + percussive_mag + 1e-10
+        harmonic_mask = harmonic_mag / total
+        percussive_mask = percussive_mag / total
+        
+        # Apply masks to original magnitude
+        harmonic_out = magnitude * harmonic_mask
+        percussive_out = magnitude * percussive_mask
+        
+        return harmonic_out, percussive_out
     
     def show_about(self):
         """Show About dialog in a popup window"""
