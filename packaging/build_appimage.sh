@@ -145,6 +145,12 @@ exec "$HERE/usr/bin/stemweaver" "$@"
 EOF
 chmod +x "$APPDIR/AppRun"
 
+# Copy desktop file to AppDir root for extracted appimagetool compatibility
+if [ -f "$APPDIR/usr/share/applications/stemweaver.desktop" ]; then
+  cp "$APPDIR/usr/share/applications/stemweaver.desktop" "$APPDIR/"
+  echo "Copied desktop file to AppDir root for compatibility"
+fi
+
 # Create AppImage using appimagetool
 echo "Creating AppImage..."
 cd "$APPDIR"
