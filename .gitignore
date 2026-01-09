@@ -62,6 +62,7 @@ _temp_*
 .history/
 dev/
 packaging/download_tools_log.txt
+tests/
 
 # Documentation - keep only essential files
 # Ignore all .md and .txt files first

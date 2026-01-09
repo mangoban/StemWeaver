@@ -4,11 +4,21 @@ set -euo pipefail
 # build_appimage.sh - Build StemWeaver AppImage
 # Creates a self-contained AppImage with all dependencies
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 APP=StemWeaver
-APPDIR=AppDir
-APPIMAGE=StemWeaver-v1.1-x86_64.AppImage
+APPDIR="$REPO_ROOT/AppDir"
+APPIMAGE="$REPO_ROOT/StemWeaver-v1.1-x86_64.AppImage"
+
+# Ensure we're in the repository root for the build
+cd "$REPO_ROOT"
 
 echo "Building StemWeaver AppImage..."
+echo "Script directory: $SCRIPT_DIR"
+echo "Repository root: $REPO_ROOT"
+echo "AppDir: $APPDIR"
 
 # Clean previous build
 rm -rf "$APPDIR"
@@ -16,7 +26,8 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/i
 
 # Copy application files
 echo "Copying application files..."
-rsync -a --exclude='.git' --exclude='packaging' --exclude='*.AppImage' --exclude='AppDir' . "$APPDIR/usr/share/stemweaver/"
+cd "$REPO_ROOT"
+rsync -a --exclude='.git' --exclude='packaging' --exclude='*.AppImage' --exclude='AppDir' --exclude='myenv' --exclude='build' --exclude='build_new.log' --exclude='*.7z' --exclude='.history' --exclude='models/Demucs_Models/v3_v4_repo' --exclude='models/MDX_Net_Models/model_data' . "$APPDIR/usr/share/stemweaver/"
 
 # Create launcher script
 cat > "$APPDIR/usr/bin/stemweaver" <<'EOF'
@@ -55,6 +66,7 @@ fi
 
 # Create Python virtual environment
 echo "Creating Python virtual environment..."
+echo "Using Python: $(which python)"
 python -m venv "$APPDIR/usr/share/stemweaver/venv"
 source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
 
@@ -62,12 +74,15 @@ source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
 pip install --upgrade pip setuptools wheel
 
 # Install dependencies
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if [ -f "$REPO_ROOT/requirements.txt" ]; then
   echo "Installing from requirements.txt..."
+  echo "Requirements file: $REPO_ROOT/requirements.txt"
   pip install -r "$REPO_ROOT/requirements.txt"
 else
   echo "Error: requirements.txt not found at $REPO_ROOT/requirements.txt"
+  echo "Current directory: $(pwd)"
+  echo "REPO_ROOT: $REPO_ROOT"
+  ls -la "$REPO_ROOT"
   exit 1
 fi
 
@@ -135,6 +150,9 @@ if [ ! -x "$APPIMAGETOOL" ]; then
   exit 1
 fi
 
+# Ensure we're back in the repo root
+cd "$REPO_ROOT"
+
 # Set AppRun for the AppDir
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
@@ -168,13 +186,13 @@ cd "$APPDIR"
 if [ -x "$APPIMAGETOOL" ]; then
   if [ "$APPIMAGETOOL" = "$TOOLS_DIR/squashfs-root/AppRun" ]; then
     echo "Using extracted appimagetool..."
-    "$APPIMAGETOOL" . "../$APPIMAGE"
+    "$APPIMAGETOOL" . "$APPIMAGE"
   else
     echo "Using appimagetool with extract-and-run..."
     # Try with extract-and-run first, fallback to normal if that fails
-    if ! "$APPIMAGETOOL" --appimage-extract-and-run . "../$APPIMAGE" 2>/dev/null; then
+    if ! "$APPIMAGETOOL" --appimage-extract-and-run . "$APPIMAGE" 2>/dev/null; then
       echo "Extract-and-run failed, trying normal mode..."
-      "$APPIMAGETOOL" . "../$APPIMAGE"
+      "$APPIMAGETOOL" . "$APPIMAGE"
     fi
   fi
 else
@@ -182,7 +200,7 @@ else
   exit 1
 fi
 
-cd ..
+cd "$REPO_ROOT"
 
 # Verify AppImage was created successfully
 if [ -f "$APPIMAGE" ]; then

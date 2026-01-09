@@ -4,6 +4,8 @@
 
 *Created by bendeb creations © 2026*
 
+![alt text](image.png)
+
 ---
 
 ## Overview
@@ -18,6 +20,8 @@ Perfect for music producers, DJs, remixers, content creators, and audio professi
 
 - 🤖 **AI-Powered**: Uses Meta Demucs (htdemucs_6s, htdemucs, mdx_extra, mdx_q)
 - 🎚️ **4 Extraction Profiles**: 6-stem, 4-stem, vocals-only, instruments-only
+- 🎯 **Vocal-first pipeline**: Optional vocal-first extraction (detects strong vocals and recommends running a vocal→accompaniment→instrument pipeline for cleaner instrument stems)
+- 🎧 **Accompaniment-only export**: Save an accompaniment file with vocals removed (useful for backing tracks)
 - 📊 **Quality Control**: 24-bit and 32-bit audio presets
 - 🖥️ **Modern GUI**: Beautiful, intuitive interface with real-time feedback
 - 💻 **GPU Support**: CUDA acceleration for faster processing

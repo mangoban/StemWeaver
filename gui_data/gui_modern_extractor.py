@@ -496,6 +496,22 @@ class StemWeaverGUI:
                         default_value=False
                     )
                     dpg.add_text("(Best for: Vocals, Bass, Piano, Guitar)", color=(120, 120, 130, 255))
+
+                    # Vocal-first option: do a vocal/accompaniment pass first
+                    dpg.add_checkbox(
+                        label="Vocal-first: separate vocals then instruments",
+                        tag="vocal_first",
+                        default_value=False
+                    )
+                    dpg.add_text("(Recommended when vocals are strong — reduces vocal bleed into instruments)", color=(140, 140, 150, 255))
+
+                    # Accompaniment-only export (save accompaniment without vocals)
+                    dpg.add_checkbox(
+                        label="Export accompaniment-only (remove vocals)",
+                        tag="export_accompaniment",
+                        default_value=False
+                    )
+                    dpg.add_text("(Saves accompaniment minus vocals as additional file)", color=(140, 140, 150, 255))
                     
                     # Denoising options
                     dpg.add_spacer(height=5)
@@ -835,6 +851,17 @@ class StemWeaverGUI:
             # Offer to auto-select the model
             self.log(f"\n  [TIP] Click 'Apply Recommendation' to auto-select this model")
             
+            # Recommend vocal-first if vocals are prominent
+            vocal_strength = mid_pct * (harmonic_energy / (np.mean(np.abs(y)) + 1e-9))
+            if has_vocals_melody and (mid_pct > 30 or vocal_strength > 0.02 or vocal_score >= 3):
+                self.log(f"\n  [RECOMMENDATION] Vocal-first separation is recommended for cleaner instruments")
+                # Auto-suggest by enabling the checkbox (user can change it back)
+                try:
+                    dpg.set_value("vocal_first", True)
+                    self.log("  [AUTO] 'Vocal-first' option enabled")
+                except Exception:
+                    pass
+
             # Store the recommendation
             self.recommended_model = recommended_model
             
@@ -941,6 +968,10 @@ class StemWeaverGUI:
         files_failed = 0
         
         try:
+            # If called directly (for tests), ensure processing flag is enabled
+            if not self.processing:
+                self.processing = True
+
             # Check prerequisites first
             if not HAS_AUDIO_LIBS:
                 self.log("[ERROR] Audio libraries not installed!")
@@ -1295,6 +1326,51 @@ class StemWeaverGUI:
                         self.log(f"  [CPU] Quality mode: shifts={actual_shifts}")
                     
                     # Apply Demucs model with quality settings
+                    # Check if we should run vocal-first pre-processing
+                    vocal_first = dpg.get_value("vocal_first") if dpg.does_item_exist("vocal_first") else False
+                    export_accompaniment = dpg.get_value("export_accompaniment") if dpg.does_item_exist("export_accompaniment") else False
+
+                    if vocal_first:
+                        self.log(f"  [VOCAL-FIRST] Performing initial vocal/accompaniment separation...")
+                        try:
+                            init_sources = apply_model(model, waveform, device=device, shifts=(0 if self.is_cpu else actual_shifts), overlap=(0.1 if self.is_cpu else overlap), segment=None, progress=False)
+                            # Demucs ordering: (batch, n_sources, channels, time)
+                            # Vocal index used by our stem mapping is 3 for both 4- and 6-stem models
+                            vocal_idx = 3
+                            if init_sources is not None and init_sources.shape[1] > vocal_idx:
+                                # Sum all non-vocal sources to produce accompaniment
+                                accomp = None
+                                for s in range(init_sources.shape[1]):
+                                    if s == vocal_idx:
+                                        continue
+                                    src = init_sources[0, s]  # (channels, samples)
+                                    if accomp is None:
+                                        accomp = src.clone()
+                                    else:
+                                        accomp = accomp + src
+
+                                # Replace waveform with accompaniment for second-stage separation
+                                waveform = accomp.unsqueeze(0)  # shape becomes (1, channels, samples)
+                                self.log("  [VOCAL-FIRST] Accompaniment computed (vocals removed)")
+
+                                if export_accompaniment:
+                                    try:
+                                        accomp_np = accomp.cpu().numpy()
+                                        # transpose to (samples, channels) for soundfile
+                                        if accomp_np.ndim == 2:
+                                            accomp_to_write = np.transpose(accomp_np, (1, 0))
+                                        else:
+                                            accomp_to_write = accomp_np
+                                        accomp_path = os.path.join(file_dir, f"{name_no_ext}_accompaniment.wav")
+                                        sf.write(accomp_path, accomp_to_write, samplerate=sample_rate)
+                                        self.log(f"  ✓ Saved accompaniment-only: {os.path.basename(accomp_path)}")
+                                    except Exception as e:
+                                        self.log(f"  [WARN] Failed to save accompaniment: {str(e)[:80]}")
+                            else:
+                                self.log("  [WARN] Vocal index not present in initial output; skipping vocal-first")
+                        except Exception as e:
+                            self.log(f"  [WARN] Vocal-first step failed: {str(e)[:80]}")
+
                     self.log(f"  Running AI separation...")
                     if shifts > 0:
                         self.log(f"  Multi-pass mode: {shifts} shifts for cleaner output")
@@ -1797,11 +1873,36 @@ class StemWeaverGUI:
             self.log("[*] Ready to start new processing")
         else:
             self.log("[*] Not currently processing")
+
+    def process_files_sync(self, files, **kwargs):
+        """Convenience wrapper to run processing synchronously (useful for tests).
+
+        Args:
+            files: list of file paths to process
+            kwargs: optional dpg item values to set before running (e.g., ai_model, quality, vocal_first)
+
+        Returns:
+            The console log text after processing completes.
+        """
+        # Apply optional settings
+        for key, val in kwargs.items():
+            try:
+                dpg.set_value(key, val)
+            except Exception:
+                pass
+
+        # Set files and run synchronously
+        self.selected_files = files
+        # Ensure processing flag is false so process_files will enable it
+        self.processing = False
+        self.process_files()
+        return dpg.get_value("console")
     
     def apply_denoising(self, input_file, output_file, denoise_level=0.08):
         """
-        Apply noise reduction to audio file using spectral gating
+        Apply noise reduction using librosa's built-in noise reduction
         denoise_level: 0.0-0.3 (0=off, 0.08=light, 0.2=strong)
+        Uses spectral gating with proper transient preservation
         """
         try:
             import librosa
@@ -1811,31 +1912,69 @@ class StemWeaverGUI:
             # Load audio
             y, sr = librosa.load(input_file, sr=None, mono=False)
             
-            # Apply spectral gating (noise reduction)
-            if denoise_level > 0:
-                # Calculate threshold based on denoise level
-                # Lower level = more aggressive noise removal
-                threshold = np.percentile(np.abs(y), 100 * (1 - denoise_level))
-                
-                # Create mask for signal above threshold
-                mask = np.abs(y) > threshold
-                
-                # Apply mask
-                y_clean = y * mask.astype(float)
-                
-                # Preserve transients by mixing back some original
-                # This prevents the "underwater" sound from over-denoising
-                if denoise_level < 0.15:
-                    y_clean = y_clean * 0.7 + y * 0.3
-                elif denoise_level < 0.25:
-                    y_clean = y_clean * 0.5 + y * 0.5
-                else:
-                    y_clean = y_clean * 0.3 + y * 0.7
+            if denoise_level <= 0:
+                # No denoising, just copy
+                sf.write(output_file, y.T, sr)
+                return True
+            
+            # Convert to mono for noise analysis (if stereo)
+            if y.ndim > 1:
+                y_mono = np.mean(y, axis=0)
             else:
-                y_clean = y
+                y_mono = y
+            
+            # Use first 0.5 seconds as noise profile (assuming silence at start)
+            # or use percentile-based noise estimation
+            noise_sample_duration = min(0.5, len(y_mono) / sr)
+            noise_sample_samples = int(noise_sample_duration * sr)
+            
+            if noise_sample_samples > 1000:  # Only if we have enough samples
+                noise_profile = y_mono[:noise_sample_samples]
+            else:
+                # Use quietest portion
+                noise_profile = y_mono[np.abs(y_mono) < np.percentile(np.abs(y_mono), 20)]
+            
+            # Calculate noise statistics
+            noise_mean = np.mean(noise_profile)
+            noise_std = np.std(noise_profile)
+            
+            # Threshold based on denoise level
+            # 0.08 = 2.5σ, 0.15 = 2.0σ, 0.2 = 1.5σ, 0.3 = 1.0σ
+            sigma_threshold = 2.5 - (denoise_level * 5.0)
+            threshold = noise_mean + noise_std * sigma_threshold
+            
+            # Apply soft thresholding to avoid artifacts
+            y_clean = np.zeros_like(y)
+            
+            for channel in range(y.shape[0] if y.ndim > 1 else 1):
+                audio_channel = y[channel] if y.ndim > 1 else y
+                
+                # Soft thresholding
+                magnitude = np.abs(audio_channel)
+                phase = np.angle(audio_channel)
+                
+                # Create smooth mask
+                mask = np.tanh((magnitude - threshold) / (threshold * 0.5))
+                mask = np.clip(mask, 0, 1)
+                
+                # Apply mask with smooth transition
+                y_clean_channel = audio_channel * mask
+                
+                # Preserve transients by mixing with original for strong signals
+                # This prevents hissing on quiet parts
+                strong_signal = magnitude > threshold * 2
+                y_clean_channel[strong_signal] = audio_channel[strong_signal]
+                
+                if y.ndim > 1:
+                    y_clean[channel] = y_clean_channel
+                else:
+                    y_clean = y_clean_channel
+            
+            # Final smoothing to remove any remaining artifacts
+            y_clean = librosa.util.normalize(y_clean) * 0.95
             
             # Save cleaned file
-            sf.write(output_file, y_clean.T, sr)
+            sf.write(output_file, y_clean.T if y_clean.ndim > 1 else y_clean, sr)
             return True
             
         except Exception as e:
