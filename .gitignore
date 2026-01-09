@@ -63,11 +63,18 @@ _temp_*
 dev/
 packaging/download_tools_log.txt
 
-# Documentation - keep README, LICENSE, CONTRIBUTING only
+# Documentation - keep only essential files
+# Ignore all .md and .txt files first
+*.md
+*.txt
+# Then re-include the specific ones we want
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+!BUILD_INSTRUCTIONS.md
+# Ignore docs folder completely
 docs/
-LICENSE_SUMMARY.md
-GITHUB_SETUP.md
-PUSH_SUMMARY.txt
+.history/
 
 # Virtual environment (if in root)
 bin/
