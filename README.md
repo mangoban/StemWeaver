@@ -42,17 +42,25 @@ chmod +x StemWeaver-v1.1-x86_64.AppImage
 ./StemWeaver-v1.1-x86_64.AppImage
 ```
 
-### Building from Source (For Developers)
+### Building from Source (Easy Method)
 
 ```bash
 # Clone the repository
 git clone https://github.com/mangoban/StemWeaver.git
 cd StemWeaver
 
-# Build AppImage
-cd packaging
-./build_appimage.sh
+# Run interactive build script
+./build.sh
 ```
+
+This will present you with multiple build options:
+- **Option 1:** AppImage (x86_64) - Recommended for most Linux users
+- **Option 2:** AppImage (ARM64) - For ARM-based systems
+- **Option 3:** Arch Linux Package - For Arch/Manjaro
+- **Option 4:** Development Environment - For developers
+- **Option 5:** Build ALL packages
+
+See [BUILD_GUIDE.md](docs/BUILD_GUIDE.md) for detailed instructions.
 
 ### Manual Installation (Advanced)
 
