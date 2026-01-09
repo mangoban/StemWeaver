@@ -55,7 +55,6 @@ fi
 
 # Create Python virtual environment
 echo "Creating Python virtual environment..."
-source myenv/bin/activate
 python -m venv "$APPDIR/usr/share/stemweaver/venv"
 source "$APPDIR/usr/share/stemweaver/venv/bin/activate"
 
@@ -74,7 +73,7 @@ fi
 
 # Install CPU-only PyTorch (required for Demucs)
 echo "Installing PyTorch (CPU version)..."
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Install ONNX Runtime (for VR models)
 echo "Installing ONNX Runtime..."

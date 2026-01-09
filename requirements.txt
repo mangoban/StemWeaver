@@ -5,15 +5,18 @@ librosa
 scipy
 
 # PyTorch (CPU only)
-torch==2.9.1+cpu
-torchaudio==2.9.1+cpu
+torch
+torchaudio
 
 # Demucs AI models
-demucs==4.0.1
+demucs
 
 # GUI
-dearpygui==2.1.1
+dearpygui
 
-# Remove heavy dependencies
-# llvmlite (numba dependency - 160MB)
-# numba (not needed for basic audio processing)
+# ONNX Runtime for VR models
+onnxruntime
+
+# MIDI export
+pretty_midi
+midiutil
