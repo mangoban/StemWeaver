@@ -228,6 +228,97 @@ build_arch_package() {
     fi
 }
 
+# Build Windows executable
+build_windows_exe() {
+    print_section "Building Windows Executable (.exe)"
+    
+    local log_file="$BUILD_LOG_DIR/windows_exe_$BUILD_TIMESTAMP.log"
+    
+    if ! command_exists pyinstaller; then
+        print_info "Installing PyInstaller..."
+        if pip install pyinstaller >> "$log_file" 2>&1; then
+            print_success "PyInstaller installed"
+        else
+            print_error "Failed to install PyInstaller"
+            return 1
+        fi
+    fi
+    
+    print_info "This may take 15-20 minutes..."
+    print_info "Log: $log_file"
+    
+    # Create PyInstaller spec
+    local spec_content="# -*- mode: python ; coding: utf-8 -*-
+import sys
+from PyInstaller.utils.hooks import get_module_file_attribute
+
+block_cipher = None
+
+a = Analysis(
+    ['$SCRIPT_DIR/gui_data/gui_modern_extractor.py'],
+    pathex=['$SCRIPT_DIR'],
+    binaries=[],
+    datas=[
+        ('$SCRIPT_DIR/gui_data', 'gui_data'),
+        ('$SCRIPT_DIR/gui_data/fonts', 'gui_data/fonts'),
+        ('$SCRIPT_DIR/gui_data/img', 'gui_data/img'),
+    ],
+    hiddenimports=['demucs', 'librosa', 'torch', 'torchaudio', 'soundfile', 'pretty_midi', 'midiutil', 'dearpygui'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludedimports=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='StemWeaver',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon='$SCRIPT_DIR/gui_data/img/stemweaver_icon.ico',
+)
+"
+    
+    echo "$spec_content" > "$SCRIPT_DIR/StemWeaver.spec"
+    
+    print_info "Creating Windows executable..."
+    if cd "$SCRIPT_DIR" && pyinstaller --onefile StemWeaver.spec >> "$log_file" 2>&1; then
+        print_success "Windows executable built successfully!"
+        
+        # Check if exe was created
+        if [ -f "$SCRIPT_DIR/dist/StemWeaver.exe" ]; then
+            local size=$(ls -lh "$SCRIPT_DIR/dist/StemWeaver.exe" | awk '{print $5}')
+            print_info "File: dist/StemWeaver.exe (Size: $size)"
+            print_warning "Note: PyInstaller bundle includes Python runtime (~300-500MB)"
+        fi
+        return 0
+    else
+        print_error "Windows executable build failed!"
+        print_info "Check log: $log_file"
+        return 1
+    fi
+}
+
 # Build from source (development installation)
 build_from_source() {
     print_section "Setting up Development Environment"
@@ -285,11 +376,12 @@ show_menu() {
     echo "  2) Build AppImage (ARM64) - For ARM-based Linux systems"
     echo "  3) Build Arch Linux Package - For Arch/Manjaro systems"
     echo "  4) Setup Development Environment - For source development"
-    echo "  5) Build ALL (x86_64 + ARM64 + Arch Package)"
+    echo "  6) Build Windows Executable (.exe) - For Windows systems"
+    echo "  5) Build ALL (x86_64 + Arch Package) - Create both Linux packages"
     echo ""
     echo "  0) Exit"
     echo ""
-    echo -e "${YELLOW}Enter your choice(s) (e.g., '1 3' for options 1 and 3, or '5' for all):${NC}"
+    echo -e "${YELLOW}Enter your choice(s) (e.g., '1 6' for AppImage + Windows, or '5' for all Linux):${NC}"
 }
 
 # Parse user choices
@@ -303,6 +395,7 @@ parse_choices() {
             2) selected+=("appimage_arm64") ;;
             3) selected+=("arch_package") ;;
             4) selected+=("source") ;;
+            6) selected+=("windows_exe") ;;
             5) selected=("appimage_x86_64" "arch_package"); break ;;
             0) print_info "Exiting..."; exit 0 ;;
             *) print_warning "Invalid option: $choice" ;;
@@ -350,6 +443,13 @@ execute_builds() {
                     failed+=("Development Environment")
                 fi
                 ;;
+            windows_exe)
+                if build_windows_exe; then
+                    successful+=("Windows Executable (.exe)")
+                else
+                    failed+=("Windows Executable (.exe)")
+                fi
+                ;;
         esac
     done
     
@@ -389,15 +489,17 @@ main() {
         read -r user_input
         
         # Parse input (space-separated or comma-separated)
-        user_input=$(echo "$user_input" | sed 's/,/ /g')
+        user_input=$(echo "$user_input" | sed 's/,/ /g' | tr -s ' ')
         
-        if [ -z "$user_input" ]; then
+        if [ -z "$user_input" ] || [ "$user_input" = " " ]; then
             print_warning "No input provided"
             continue
         fi
         
-        # Parse and validate choices
-        selected_builds=$(parse_choices $user_input)
+        # Parse and validate choices (pass as array)
+        # Convert space/comma-separated into array
+        read -ra choices_array <<< "$(echo "$user_input" | sed 's/,/ /g')"
+        selected_builds=$(parse_choices "${choices_array[@]}")
         
         if [ -z "$selected_builds" ]; then
             continue
@@ -412,6 +514,7 @@ main() {
                 appimage_arm64) echo "  • AppImage (ARM64)" ;;
                 arch_package) echo "  • Arch Linux Package" ;;
                 source) echo "  • Development Environment" ;;
+                windows_exe) echo "  • Windows Executable (.exe)" ;;
             esac
         done
         echo ""
