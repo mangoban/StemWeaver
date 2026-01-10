@@ -1330,6 +1330,14 @@ class StemWeaverGUI:
                     vocal_first = dpg.get_value("vocal_first") if dpg.does_item_exist("vocal_first") else False
                     export_accompaniment = dpg.get_value("export_accompaniment") if dpg.does_item_exist("export_accompaniment") else False
 
+                    # Store original waveform for vocal retrieval if needed
+                    original_waveform = waveform.clone() if vocal_first else None
+                    
+                    # FIX: For vocal-first to work properly, need 6-stem model
+                    if vocal_first and not use_6_stem:
+                        self.log(f"  [VOCAL-FIRST] ⚠️  4-stem model with vocal-first may produce noisy non-vocal stems")
+                        self.log(f"  [VOCAL-FIRST] Recommendation: Use 6-Stem model or disable vocal-first")
+                    
                     if vocal_first:
                         self.log(f"  [VOCAL-FIRST] Performing initial vocal/accompaniment separation...")
                         try:
@@ -1686,6 +1694,12 @@ class StemWeaverGUI:
                     self.log(f"  [DEBUG] Sources shape: {sources.shape}")
                     self.log(f"  [DEBUG] Selected stems: {stems}")
                     self.log(f"  [DEBUG] Stem indices mapping: {stem_indices}")
+                    
+                    # FIX: If vocal-first was used, we need to handle vocals from first pass
+                    # and other stems from second pass
+                    if vocal_first:
+                        self.log(f"  [VOCAL-FIRST] Will extract vocals from first pass, other stems from second pass")
+                    
                     dpg.set_value("progress", (idx + 0.8) / total)
                     
                     stems_saved = 0
@@ -1704,13 +1718,35 @@ class StemWeaverGUI:
                             source_idx = stem_indices[stem]
                             self.log(f"  [DEBUG] Processing {stem}: source_idx={source_idx}, total_sources={sources.shape[1]}")
                             
-                            # Check if stem index is valid for this model
-                            if source_idx >= sources.shape[1]:
-                                self.log(f"  [SKIP] {stem} not available in this model (model has {sources.shape[1]} sources)")
-                                stems_skipped.append(f"{stem} (unavailable)")
-                                continue
-                            
-                            stem_audio = sources[0, source_idx].cpu().numpy()  # Shape: (channels, samples)
+                            # FIX: Handle vocals separately in vocal-first mode
+                            if vocal_first and stem.lower() == "vocals":
+                                # Vocals were extracted in the first pass
+                                # We need to re-run initial separation to get vocals
+                                self.log(f"  [VOCAL-FIRST] Extracting vocals from initial separation...")
+                                try:
+                                    # Re-run initial separation to get vocals
+                                    init_sources = apply_model(model, original_waveform, device=device, shifts=(0 if self.is_cpu else actual_shifts), overlap=(0.1 if self.is_cpu else overlap), segment=None, progress=False)
+                                    vocal_idx = 3  # Demucs vocal index
+                                    if init_sources is not None and init_sources.shape[1] > vocal_idx:
+                                        stem_audio = init_sources[0, vocal_idx].cpu().numpy()
+                                        self.log(f"  [VOCAL-FIRST] Got vocals from initial pass")
+                                    else:
+                                        self.log(f"  [SKIP] Could not retrieve vocals from initial separation")
+                                        stems_skipped.append(f"{stem} (vocal-first failed)")
+                                        continue
+                                except Exception as e:
+                                    self.log(f"  [SKIP] Vocal retrieval failed: {str(e)[:50]}")
+                                    stems_skipped.append(f"{stem} (retrieval failed)")
+                                    continue
+                            else:
+                                # Normal stem extraction from second separation
+                                # Check if stem index is valid for this model
+                                if source_idx >= sources.shape[1]:
+                                    self.log(f"  [SKIP] {stem} not available in this model (model has {sources.shape[1]} sources)")
+                                    stems_skipped.append(f"{stem} (unavailable)")
+                                    continue
+                                
+                                stem_audio = sources[0, source_idx].cpu().numpy()  # Shape: (channels, samples)
                             
                             # Check if stem has actual content
                             max_val = np.max(np.abs(stem_audio))
