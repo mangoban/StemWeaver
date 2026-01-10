@@ -512,6 +512,7 @@ class StemWeaverGUI:
                         default_value=False
                     )
                     dpg.add_text("(Saves accompaniment minus vocals as additional file)", color=(140, 140, 150, 255))
+                    dpg.add_text("TIP: Enable Vocal-First + Select ONLY Vocals = Clean vocal isolation!", color=(0, 255, 150, 255))
                     
                     # Denoising options
                     dpg.add_spacer(height=5)
@@ -1349,12 +1350,18 @@ class StemWeaverGUI:
                     extract_vocals = dpg.get_value("stem_vocals") if dpg.does_item_exist("stem_vocals") else False
                     extract_accompaniment = export_accompaniment
                     
-                    # Check for vocal+accompaniment-only mode
-                    vocal_only_mode = (vocal_first and export_accompaniment and 
+                    # Check for vocal-only modes
+                    # Mode 1: Vocals + Accompaniment (skip second separation)
+                    vocal_plus_accomp_mode = (vocal_first and export_accompaniment and 
+                                            len(stems) == 1 and stems[0].lower() == "vocals")
+                    # Mode 2: Vocals ONLY (skip second separation, no accompaniment)
+                    vocals_only_mode = (vocal_first and not export_accompaniment and 
                                       len(stems) == 1 and stems[0].lower() == "vocals")
                     
-                    if vocal_only_mode:
+                    if vocal_plus_accomp_mode:
                         self.log(f"  [VOCAL-FIRST] Vocal+accompaniment-only mode")
+                    elif vocals_only_mode:
+                        self.log(f"  [VOCAL-FIRST] Vocals-only mode (clean isolation)")
                     
                     if vocal_first:
                         self.log(f"  [VOCAL-FIRST] Performing initial vocal/accompaniment separation...")
@@ -1399,11 +1406,14 @@ class StemWeaverGUI:
                             self.log(f"  [WARN] Vocal-first step failed: {str(e)[:80]}")
 
                     # Check if we need second separation
-                    # If vocal+accompaniment-only mode, skip second separation
-                    needs_second_pass = not vocal_only_mode
+                    # Skip second separation for vocal-only modes
+                    needs_second_pass = not (vocal_plus_accomp_mode or vocals_only_mode)
                     
-                    if vocal_only_mode:
+                    if vocal_plus_accomp_mode:
                         self.log(f"  [VOCAL-FIRST] Vocal+accompaniment-only mode, skipping second separation")
+                        sources = None  # No second separation
+                    elif vocals_only_mode:
+                        self.log(f"  [VOCAL-FIRST] Vocals-only mode, skipping second separation")
                         sources = None  # No second separation
                     else:
                         self.log(f"  Running AI separation...")
@@ -1712,9 +1722,10 @@ class StemWeaverGUI:
                                         raise
                     
                     # Validate separation output
-                    if vocal_only_mode:
+                    if vocal_plus_accomp_mode or vocals_only_mode:
                         # No second separation, just use init_sources
-                        self.log(f"  [VOCAL-FIRST] Vocal+accompaniment mode - using first pass results")
+                        mode_name = "Vocal+accompaniment" if vocal_plus_accomp_mode else "Vocals-only"
+                        self.log(f"  [VOCAL-FIRST] {mode_name} mode - using first pass results")
                     elif sources is None or sources.shape[0] == 0:
                         self.log(f"  [ERROR] AI model returned empty output!")
                         files_failed += 1
@@ -1740,13 +1751,13 @@ class StemWeaverGUI:
                         
                         try:
                             # Get stem audio
-                            if vocal_only_mode and stem.lower() == "vocals":
+                            if (vocal_plus_accomp_mode or vocals_only_mode) and stem.lower() == "vocals":
                                 # Vocals from first pass
                                 stem_audio = init_sources[0, 3].cpu().numpy()
                                 self.log(f"  [VOCAL-FIRST] Got vocals from initial pass")
-                            elif vocal_only_mode:
+                            elif vocal_plus_accomp_mode or vocals_only_mode:
                                 # Shouldn't happen - only vocals should be in stems list
-                                self.log(f"  [SKIP] {stem} not in vocal+accompaniment mode")
+                                self.log(f"  [SKIP] {stem} not in vocal-only mode")
                                 stems_skipped.append(f"{stem} (not in mode)")
                                 continue
                             elif vocal_first and stem.lower() == "vocals" and init_sources is not None:
