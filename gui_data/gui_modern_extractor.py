@@ -525,11 +525,11 @@ class StemWeaverGUI:
                         label="Denoise Level",
                         tag="denoise_level",
                         min_value=0.0,
-                        max_value=0.3,
+                        max_value=0.15,  # Reduced max to prevent abuse
                         default_value=0.08,
                         width=180
                     )
-                    dpg.add_text("(0=off, 0.08=light, 0.2=strong)", color=(120, 120, 130, 255))
+                    dpg.add_text("(Vocals only! 0=off, 0.08=light, 0.12=max)", color=(120, 120, 130, 255))
                     
                     dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
@@ -1789,18 +1789,23 @@ class StemWeaverGUI:
                                     self.log(f"  ✓ {stem}.wav ({file_size:.0f} KB)")
                                     stems_saved += 1
                                     
-                                    # Apply denoising if enabled
-                                    if dpg.get_value("apply_denoising"):
+                                    # Apply denoising if enabled - ONLY for vocals with reduced intensity
+                                    # Denoising other stems destroys quality, vocals benefit most from light denoising
+                                    if dpg.get_value("apply_denoising") and stem.lower() == "vocals":
                                         denoise_level = dpg.get_value("denoise_level")
-                                        if denoise_level > 0:
-                                            self.log(f"  [DENOISE] Cleaning {stem}.wav (level {denoise_level:.2f})...")
+                                        # Cap at 0.12 for vocals to prevent quality loss
+                                        safe_denoise_level = min(denoise_level, 0.12)
+                                        if safe_denoise_level > 0:
+                                            self.log(f"  [DENOISE] Light vocal cleanup (level {safe_denoise_level:.2f})...")
                                             temp_clean = os.path.join(file_dir, f"{name_no_ext}_{stem}_clean.wav")
-                                            if self.apply_denoising(stem_file, temp_clean, denoise_level):
+                                            if self.apply_denoising(stem_file, temp_clean, safe_denoise_level):
                                                 os.remove(stem_file)
                                                 os.rename(temp_clean, stem_file)
-                                                self.log(f"  ✓ {stem}.wav denoised")
+                                                self.log(f"  ✓ {stem}.wav cleaned")
                                             else:
                                                 self.log(f"  [WARN] Denoising failed, keeping original")
+                                    elif dpg.get_value("apply_denoising") and stem.lower() != "vocals":
+                                        self.log(f"  [INFO] Skipping denoise for {stem} (preserves quality)")
                                     
                                     # Export as MIDI if requested (skip vocals - poor MIDI conversion)
                                     if dpg.get_value("export_midi") and stem.lower() in ['bass', 'piano', 'guitar', 'drums']:
@@ -1954,8 +1959,10 @@ class StemWeaverGUI:
     def apply_denoising(self, input_file, output_file, denoise_level=0.08):
         """
         Apply noise reduction using librosa's built-in noise reduction
-        denoise_level: 0.0-0.3 (0=off, 0.08=light, 0.2=strong)
+        denoise_level: 0.0-0.3 (0=off, 0.08=light, 0.12=max_safe, 0.2=strong)
         Uses spectral gating with proper transient preservation
+        
+        IMPORTANT: Only use for vocals at low levels (0.08-0.12) to avoid destroying audio
         """
         try:
             import librosa
@@ -1991,9 +1998,10 @@ class StemWeaverGUI:
             noise_mean = np.mean(noise_profile)
             noise_std = np.std(noise_profile)
             
-            # Threshold based on denoise level
-            # 0.08 = 2.5σ, 0.15 = 2.0σ, 0.2 = 1.5σ, 0.3 = 1.0σ
-            sigma_threshold = 2.5 - (denoise_level * 5.0)
+            # Threshold based on denoise level - GENTLER for vocals
+            # 0.08 = 2.8σ, 0.10 = 2.6σ, 0.12 = 2.4σ (more conservative)
+            # This preserves more vocal quality while reducing noise
+            sigma_threshold = 2.8 - (denoise_level * 3.0)
             threshold = noise_mean + noise_std * sigma_threshold
             
             # Apply soft thresholding to avoid artifacts
