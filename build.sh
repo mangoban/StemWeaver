@@ -524,13 +524,10 @@ main() {
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             execute_builds $selected_builds
             
-            # Ask if user wants to build more
-            echo ""
-            read -p "Build more versions? (y/n) " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                break
-            fi
+            # Exit after build completes
+            print_success "Build process completed!"
+            print_info "Check /home/bendeb/stemweaver/ for output files"
+            exit 0
         fi
     done
     
