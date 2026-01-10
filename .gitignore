@@ -84,3 +84,5 @@ include/
 
 # Large binaries
 StemWeaver-v1.1-x86_64.AppImage
+!BUILD_COMPLETE.md
+!NEURAL_DENOISING_GUIDE.md
