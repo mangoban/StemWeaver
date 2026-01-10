@@ -144,16 +144,65 @@ install_dependencies() {
     fi
 }
 
+# Clean up before building
+cleanup_before_build() {
+    print_section "Cleaning Up Previous Builds"
+    
+    # Remove old AppDir
+    if [ -d "$SCRIPT_DIR/AppDir" ]; then
+        print_info "Removing old AppDir..."
+        rm -rf "$SCRIPT_DIR/AppDir"
+        print_success "Old AppDir removed"
+    fi
+    
+    # Remove old build logs (keep only recent ones)
+    if [ -d "$BUILD_LOG_DIR" ]; then
+        print_info "Cleaning old build logs..."
+        # Keep only last 5 logs
+        ls -t "$BUILD_LOG_DIR"/*.log 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
+        print_success "Old logs cleaned"
+    fi
+    
+    # Clear pip cache
+    print_info "Clearing pip cache..."
+    if pip cache purge > /dev/null 2>&1; then
+        print_success "Pip cache cleared"
+    fi
+    
+    echo ""
+}
+
 # Build AppImage x86_64
 build_appimage_x86_64() {
     print_section "Building AppImage (x86_64)"
     
     local log_file="$BUILD_LOG_DIR/appimage_x86_64_$BUILD_TIMESTAMP.log"
     
+    cleanup_before_build
+    
+    # Set larger temp directory to avoid space issues
+    export TMPDIR="/home/bendeb/build_temp"
+    mkdir -p "$TMPDIR"
+    
     print_info "This may take 20-30 minutes..."
     print_info "Log: $log_file"
+    print_info "Using temp dir: $TMPDIR"
     
-    if cd "$SCRIPT_DIR/packaging" && bash build_appimage.sh > "$log_file" 2>&1; then
+    # Change to packaging directory and run build directly
+    if cd "$SCRIPT_DIR/packaging" && export TMPDIR="$TMPDIR" && bash build_appimage.sh > "$log_file" 2>&1; then
+        print_success "AppImage (x86_64) built successfully!"
+        if [ -f "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" ]; then
+            local size=$(ls -lh "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" | awk '{print $5}')
+            print_info "File: StemWeaver-v1.1-x86_64.AppImage (Size: $size)"
+            chmod +x "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage"
+        fi
+        return 0
+    else
+        print_error "AppImage (x86_64) build failed!"
+        print_info "Check log: $log_file"
+        return 1
+    fi
+}
         print_success "AppImage (x86_64) built successfully!"
         if [ -f "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" ]; then
             local size=$(ls -lh "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" | awk '{print $5}')
@@ -173,6 +222,8 @@ build_appimage_arm64() {
     print_section "Building AppImage (ARM64)"
     
     local log_file="$BUILD_LOG_DIR/appimage_arm64_$BUILD_TIMESTAMP.log"
+    
+    cleanup_before_build
     
     # Check if we're on ARM64
     if [ "$(uname -m)" != "aarch64" ]; then
@@ -205,6 +256,8 @@ build_arch_package() {
     
     local log_file="$BUILD_LOG_DIR/arch_package_$BUILD_TIMESTAMP.log"
     
+    cleanup_before_build
+    
     if ! command_exists makepkg; then
         print_error "makepkg not found - this build type requires Arch Linux/Manjaro"
         return 1
@@ -234,6 +287,12 @@ build_windows_exe() {
     
     local log_file="$BUILD_LOG_DIR/windows_exe_$BUILD_TIMESTAMP.log"
     
+    cleanup_before_build
+    
+    # Set larger temp directory
+    export TMPDIR="/home/bendeb/build_temp"
+    mkdir -p "$TMPDIR"
+    
     if ! command_exists pyinstaller; then
         print_info "Installing PyInstaller..."
         if pip install pyinstaller >> "$log_file" 2>&1; then
@@ -246,6 +305,7 @@ build_windows_exe() {
     
     print_info "This may take 15-20 minutes..."
     print_info "Log: $log_file"
+    print_info "Using temp dir: $TMPDIR"
     
     # Create PyInstaller spec
     local spec_content="# -*- mode: python ; coding: utf-8 -*-
@@ -302,7 +362,7 @@ exe = EXE(
     echo "$spec_content" > "$SCRIPT_DIR/StemWeaver.spec"
     
     print_info "Creating Windows executable..."
-    if cd "$SCRIPT_DIR" && pyinstaller --onefile StemWeaver.spec >> "$log_file" 2>&1; then
+    if cd "$SCRIPT_DIR" && export TMPDIR="$TMPDIR" && pyinstaller --onefile StemWeaver.spec >> "$log_file" 2>&1; then
         print_success "Windows executable built successfully!"
         
         # Check if exe was created

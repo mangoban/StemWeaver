@@ -1333,10 +1333,28 @@ class StemWeaverGUI:
                     # Store original waveform for vocal retrieval if needed
                     original_waveform = waveform.clone() if vocal_first else None
                     
-                    # FIX: For vocal-first to work properly, need 6-stem model
+                    # FIX: Automatic handling of vocal-first for different model types
+                    # For 4-stem models: vocal-first doesn't work well, so we disable it automatically
+                    # For 6-stem models: vocal-first works perfectly
                     if vocal_first and not use_6_stem:
-                        self.log(f"  [VOCAL-FIRST] ⚠️  4-stem model with vocal-first may produce noisy non-vocal stems")
-                        self.log(f"  [VOCAL-FIRST] Recommendation: Use 6-Stem model or disable vocal-first")
+                        self.log(f"  [VOCAL-FIRST] Auto-disabled for 4-stem model (not compatible)")
+                        self.log(f"  [INFO] Using normal separation instead")
+                        vocal_first = False  # Disable it automatically
+                        export_accompaniment = False
+                    
+                    # Store initial sources for vocal retrieval
+                    init_sources = None
+                    
+                    # Determine what to extract based on user selections
+                    extract_vocals = dpg.get_value("stem_vocals") if dpg.does_item_exist("stem_vocals") else False
+                    extract_accompaniment = export_accompaniment
+                    
+                    # Check for vocal+accompaniment-only mode
+                    vocal_only_mode = (vocal_first and export_accompaniment and 
+                                      len(stems) == 1 and stems[0].lower() == "vocals")
+                    
+                    if vocal_only_mode:
+                        self.log(f"  [VOCAL-FIRST] Vocal+accompaniment-only mode")
                     
                     if vocal_first:
                         self.log(f"  [VOCAL-FIRST] Performing initial vocal/accompaniment separation...")
@@ -1361,7 +1379,8 @@ class StemWeaverGUI:
                                 waveform = accomp.unsqueeze(0)  # shape becomes (1, channels, samples)
                                 self.log("  [VOCAL-FIRST] Accompaniment computed (vocals removed)")
 
-                                if export_accompaniment:
+                                # Save accompaniment-only if requested
+                                if extract_accompaniment:
                                     try:
                                         accomp_np = accomp.cpu().numpy()
                                         # transpose to (samples, channels) for soundfile
@@ -1379,11 +1398,19 @@ class StemWeaverGUI:
                         except Exception as e:
                             self.log(f"  [WARN] Vocal-first step failed: {str(e)[:80]}")
 
-                    self.log(f"  Running AI separation...")
-                    if shifts > 0:
-                        self.log(f"  Multi-pass mode: {shifts} shifts for cleaner output")
-                    dpg.set_value("status", f"AI Processing: {name}")
-                    dpg.set_value("progress", (idx + 0.1) / total)
+                    # Check if we need second separation
+                    # If vocal+accompaniment-only mode, skip second separation
+                    needs_second_pass = not vocal_only_mode
+                    
+                    if vocal_only_mode:
+                        self.log(f"  [VOCAL-FIRST] Vocal+accompaniment-only mode, skipping second separation")
+                        sources = None  # No second separation
+                    else:
+                        self.log(f"  Running AI separation...")
+                        if shifts > 0:
+                            self.log(f"  Multi-pass mode: {shifts} shifts for cleaner output")
+                        dpg.set_value("status", f"AI Processing: {name}")
+                        dpg.set_value("progress", (idx + 0.1) / total)
                     
                     with torch.no_grad():
                         # Demucs separation with shifts for better quality
@@ -1685,20 +1712,18 @@ class StemWeaverGUI:
                                         raise
                     
                     # Validate separation output
-                    if sources is None or sources.shape[0] == 0:
+                    if vocal_only_mode:
+                        # No second separation, just use init_sources
+                        self.log(f"  [VOCAL-FIRST] Vocal+accompaniment mode - using first pass results")
+                    elif sources is None or sources.shape[0] == 0:
                         self.log(f"  [ERROR] AI model returned empty output!")
                         files_failed += 1
                         continue
-                    
-                    self.log(f"  AI separation complete! Saving {len(stems)} stems...")
-                    self.log(f"  [DEBUG] Sources shape: {sources.shape}")
-                    self.log(f"  [DEBUG] Selected stems: {stems}")
-                    self.log(f"  [DEBUG] Stem indices mapping: {stem_indices}")
-                    
-                    # FIX: If vocal-first was used, we need to handle vocals from first pass
-                    # and other stems from second pass
-                    if vocal_first:
-                        self.log(f"  [VOCAL-FIRST] Will extract vocals from first pass, other stems from second pass")
+                    else:
+                        self.log(f"  AI separation complete! Saving {len(stems)} stems...")
+                        self.log(f"  [DEBUG] Sources shape: {sources.shape}")
+                        self.log(f"  [DEBUG] Selected stems: {stems}")
+                        self.log(f"  [DEBUG] Stem indices mapping: {stem_indices}")
                     
                     dpg.set_value("progress", (idx + 0.8) / total)
                     
@@ -1714,33 +1739,25 @@ class StemWeaverGUI:
                         dpg.set_value("progress", progress)
                         
                         try:
-                            # Get the separated audio for this stem
-                            source_idx = stem_indices[stem]
-                            self.log(f"  [DEBUG] Processing {stem}: source_idx={source_idx}, total_sources={sources.shape[1]}")
-                            
-                            # FIX: Handle vocals separately in vocal-first mode
-                            if vocal_first and stem.lower() == "vocals":
-                                # Vocals were extracted in the first pass
-                                # We need to re-run initial separation to get vocals
-                                self.log(f"  [VOCAL-FIRST] Extracting vocals from initial separation...")
-                                try:
-                                    # Re-run initial separation to get vocals
-                                    init_sources = apply_model(model, original_waveform, device=device, shifts=(0 if self.is_cpu else actual_shifts), overlap=(0.1 if self.is_cpu else overlap), segment=None, progress=False)
-                                    vocal_idx = 3  # Demucs vocal index
-                                    if init_sources is not None and init_sources.shape[1] > vocal_idx:
-                                        stem_audio = init_sources[0, vocal_idx].cpu().numpy()
-                                        self.log(f"  [VOCAL-FIRST] Got vocals from initial pass")
-                                    else:
-                                        self.log(f"  [SKIP] Could not retrieve vocals from initial separation")
-                                        stems_skipped.append(f"{stem} (vocal-first failed)")
-                                        continue
-                                except Exception as e:
-                                    self.log(f"  [SKIP] Vocal retrieval failed: {str(e)[:50]}")
-                                    stems_skipped.append(f"{stem} (retrieval failed)")
-                                    continue
+                            # Get stem audio
+                            if vocal_only_mode and stem.lower() == "vocals":
+                                # Vocals from first pass
+                                stem_audio = init_sources[0, 3].cpu().numpy()
+                                self.log(f"  [VOCAL-FIRST] Got vocals from initial pass")
+                            elif vocal_only_mode:
+                                # Shouldn't happen - only vocals should be in stems list
+                                self.log(f"  [SKIP] {stem} not in vocal+accompaniment mode")
+                                stems_skipped.append(f"{stem} (not in mode)")
+                                continue
+                            elif vocal_first and stem.lower() == "vocals" and init_sources is not None:
+                                # Vocals from first pass (with other stems)
+                                stem_audio = init_sources[0, 3].cpu().numpy()
+                                self.log(f"  [VOCAL-FIRST] Got vocals from initial pass")
                             else:
-                                # Normal stem extraction from second separation
-                                # Check if stem index is valid for this model
+                                # Normal stem from second separation
+                                source_idx = stem_indices[stem]
+                                self.log(f"  [DEBUG] Processing {stem}: source_idx={source_idx}, total_sources={sources.shape[1]}")
+                                
                                 if source_idx >= sources.shape[1]:
                                     self.log(f"  [SKIP] {stem} not available in this model (model has {sources.shape[1]} sources)")
                                     stems_skipped.append(f"{stem} (unavailable)")
@@ -1785,8 +1802,8 @@ class StemWeaverGUI:
                                             else:
                                                 self.log(f"  [WARN] Denoising failed, keeping original")
                                     
-                                    # Export as MIDI if requested
-                                    if dpg.get_value("export_midi") and stem.lower() in ['vocals', 'bass', 'piano', 'guitar', 'drums']:
+                                    # Export as MIDI if requested (skip vocals - poor MIDI conversion)
+                                    if dpg.get_value("export_midi") and stem.lower() in ['bass', 'piano', 'guitar', 'drums']:
                                         midi_file = os.path.join(file_dir, f"{name_no_ext}_{stem}.mid")
                                         if self.audio_to_midi(stem_file, midi_file, stem.lower()):
                                             self.log(f"  ♪ {stem}.mid exported")

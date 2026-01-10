@@ -15,10 +15,17 @@ APPIMAGE="$REPO_ROOT/StemWeaver-v1.1-x86_64.AppImage"
 # Ensure we're in the repository root for the build
 cd "$REPO_ROOT"
 
+# Set larger temp directory to avoid space issues
+if [ -z "${TMPDIR:-}" ]; then
+    export TMPDIR="/home/bendeb/build_temp"
+    mkdir -p "$TMPDIR"
+fi
+
 echo "Building StemWeaver AppImage..."
 echo "Script directory: $SCRIPT_DIR"
 echo "Repository root: $REPO_ROOT"
 echo "AppDir: $APPDIR"
+echo "Temp directory: $TMPDIR"
 
 # Clean previous build
 rm -rf "$APPDIR"
