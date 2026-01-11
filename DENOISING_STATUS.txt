@@ -1,0 +1,35 @@
+DENOISING FEATURE STATUS
+========================
+
+Date: January 11, 2026
+Status: COMPLETELY DISABLED ✓
+
+What was done:
+1. GUI denoising checkbox - COMMENTED OUT
+2. GUI denoise level slider - COMMENTED OUT  
+3. GUI neural denoise checkbox - COMMENTED OUT
+4. Processing loop denoising logic - COMMENTED OUT
+5. apply_denoising() function - COMMENTED OUT
+6. apply_neural_denoising() function - COMMENTED OUT
+7. _neural_frequency_denoise() function - COMMENTED OUT
+
+Verification:
+✓ No active denoising code in GUI
+✓ No active denoising code in processing
+✓ No active denoising functions
+✓ All references commented out
+
+Result:
+- All stems saved clean without any processing
+- No denoising options in GUI
+- Vocal-first mode works perfectly
+- All other features working correctly
+
+Future:
+- Denoising will be revisited with proper implementation
+- Will ensure it ONLY affects vocals
+- Will add comprehensive testing
+- Will prevent adding noise to all stems
+
+Current Build: Ready for production use
+Denoising: Disabled (will be reimplemented later)
