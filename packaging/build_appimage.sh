@@ -16,8 +16,13 @@ APPIMAGE="$REPO_ROOT/StemWeaver-v1.1-x86_64.AppImage"
 cd "$REPO_ROOT"
 
 # Set larger temp directory to avoid space issues
+# Use /tmp if /home/bendeb/build_temp is not accessible (e.g., in CI)
 if [ -z "${TMPDIR:-}" ]; then
-    export TMPDIR="/home/bendeb/build_temp"
+    if [ -w "/home/bendeb/build_temp" ]; then
+        export TMPDIR="/home/bendeb/build_temp"
+    else
+        export TMPDIR="/tmp/stemweaver_build"
+    fi
     mkdir -p "$TMPDIR"
 fi
 
