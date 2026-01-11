@@ -30,7 +30,7 @@ jobs:
           
       - name: Build AppImage
         run: |
-          packaging/build_appimage.sh
+          packaging/build_appimage_github.sh
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -61,7 +61,7 @@ jobs:
           
       - name: Build AppImage
         run: |
-          packaging/build_appimage.sh
+          packaging/build_appimage_github.sh
           
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -18,12 +18,14 @@ cd "$REPO_ROOT"
 # Set larger temp directory to avoid space issues
 # Use /tmp if /home/bendeb/build_temp is not accessible (e.g., in CI)
 if [ -z "${TMPDIR:-}" ]; then
-    if [ -w "/home/bendeb/build_temp" ]; then
-        export TMPDIR="/home/bendeb/build_temp"
+    # Try custom temp dir first, fallback to /tmp
+    CUSTOM_TEMP="/home/bendeb/build_temp"
+    if mkdir -p "$CUSTOM_TEMP" 2>/dev/null && [ -w "$CUSTOM_TEMP" ]; then
+        export TMPDIR="$CUSTOM_TEMP"
     else
         export TMPDIR="/tmp/stemweaver_build"
+        mkdir -p "$TMPDIR"
     fi
-    mkdir -p "$TMPDIR"
 fi
 
 echo "Building StemWeaver AppImage..."

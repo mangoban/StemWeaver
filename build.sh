@@ -181,8 +181,14 @@ build_appimage_x86_64() {
     cleanup_before_build
     
     # Set larger temp directory to avoid space issues
-    export TMPDIR="/home/bendeb/build_temp"
-    mkdir -p "$TMPDIR"
+    # Try custom temp dir first, fallback to /tmp
+    CUSTOM_TEMP="/home/bendeb/build_temp"
+    if mkdir -p "$CUSTOM_TEMP" 2>/dev/null && [ -w "$CUSTOM_TEMP" ]; then
+        export TMPDIR="$CUSTOM_TEMP"
+    else
+        export TMPDIR="/tmp/stemweaver_build"
+        mkdir -p "$TMPDIR"
+    fi
     
     print_info "This may take 20-30 minutes..."
     print_info "Log: $log_file"
@@ -290,8 +296,13 @@ build_windows_exe() {
     cleanup_before_build
     
     # Set larger temp directory
-    export TMPDIR="/home/bendeb/build_temp"
-    mkdir -p "$TMPDIR"
+    CUSTOM_TEMP="/home/bendeb/build_temp"
+    if mkdir -p "$CUSTOM_TEMP" 2>/dev/null && [ -w "$CUSTOM_TEMP" ]; then
+        export TMPDIR="$CUSTOM_TEMP"
+    else
+        export TMPDIR="/tmp/stemweaver_build"
+        mkdir -p "$TMPDIR"
+    fi
     
     if ! command_exists pyinstaller; then
         print_info "Installing PyInstaller..."
