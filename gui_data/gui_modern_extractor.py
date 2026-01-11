@@ -514,29 +514,29 @@ class StemWeaverGUI:
                     dpg.add_text("(Saves accompaniment minus vocals as additional file)", color=(140, 140, 150, 255))
                     dpg.add_text("TIP: Enable Vocal-First + Select ONLY Vocals = Clean vocal isolation!", color=(0, 255, 150, 255))
                     
-                    # Denoising options
-                    dpg.add_spacer(height=5)
-                    dpg.add_text("Post-Processing:", color=(255, 100, 150, 255))
-                    dpg.add_checkbox(
-                        label="Apply Denoising",
-                        tag="apply_denoising",
-                        default_value=True
-                    )
-                    dpg.add_checkbox(
-                        label="Use Neural Denoiser (UVR-DeNoise-Lite)",
-                        tag="neural_denoise",
-                        default_value=False
-                    )
-                    dpg.add_text("(Better quality, slower - requires model)", color=(140, 140, 150, 255))
-                    dpg.add_slider_float(
-                        label="Denoise Level",
-                        tag="denoise_level",
-                        min_value=0.0,
-                        max_value=0.15,  # Reduced max to prevent abuse
-                        default_value=0.08,
-                        width=180
-                    )
-                    dpg.add_text("(Vocals only! 0=off, 0.08=light, 0.12=max)", color=(120, 120, 130, 255))
+                    # Denoising options - DISABLED FOR NOW (causing issues)
+                    # dpg.add_spacer(height=5)
+                    # dpg.add_text("Post-Processing:", color=(255, 100, 150, 255))
+                    # dpg.add_checkbox(
+                    #     label="Apply Denoising",
+                    #     tag="apply_denoising",
+                    #     default_value=False
+                    # )
+                    # dpg.add_checkbox(
+                    #     label="Use Neural Denoiser (UVR-DeNoise-Lite)",
+                    #     tag="neural_denoise",
+                    #     default_value=False
+                    # )
+                    # dpg.add_text("(Better quality, slower - requires model)", color=(140, 140, 150, 255))
+                    # dpg.add_slider_float(
+                    #     label="Denoise Level",
+                    #     tag="denoise_level",
+                    #     min_value=0.0,
+                    #     max_value=0.15,
+                    #     default_value=0.08,
+                    #     width=180
+                    # )
+                    # dpg.add_text("(Vocals only! 0=off, 0.08=light, 0.12=max)", color=(120, 120, 130, 255))
                     
                     dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
@@ -1806,30 +1806,20 @@ class StemWeaverGUI:
                                     self.log(f"  ✓ {stem}.wav ({file_size:.0f} KB)")
                                     stems_saved += 1
                                     
-                                    # Apply denoising if enabled - ONLY for vocals with reduced intensity
-                                    # Denoising other stems destroys quality, vocals benefit most from light denoising
-                                    if dpg.get_value("apply_denoising") and stem.lower() == "vocals":
-                                        denoise_level = dpg.get_value("denoise_level")
-                                        # Cap at 0.12 for vocals to prevent quality loss
-                                        safe_denoise_level = min(denoise_level, 0.12)
-                                        if safe_denoise_level > 0:
-                                            # Check for neural denoising option
-                                            use_neural = dpg.get_value("neural_denoise") if dpg.does_item_exist("neural_denoise") else False
-                                            
-                                            if use_neural:
-                                                self.log(f"  [NEURAL DENOISE] Using AI model (level {safe_denoise_level:.2f})...")
-                                            else:
-                                                self.log(f"  [DENOISE] Light vocal cleanup (level {safe_denoise_level:.2f})...")
-                                            
-                                            temp_clean = os.path.join(file_dir, f"{name_no_ext}_{stem}_clean.wav")
-                                            if self.apply_denoising(stem_file, temp_clean, safe_denoise_level, use_neural):
-                                                os.remove(stem_file)
-                                                os.rename(temp_clean, stem_file)
-                                                self.log(f"  ✓ {stem}.wav cleaned")
-                                            else:
-                                                self.log(f"  [WARN] Denoising failed, keeping original")
-                                    elif dpg.get_value("apply_denoising") and stem.lower() != "vocals":
-                                        self.log(f"  [INFO] Skipping denoise for {stem} (preserves quality)")
+                                    # DENOISING DISABLED - causing issues with all stems
+                                    # Will be revisited in future update
+                                    # if dpg.get_value("apply_denoising") and stem.lower() == "vocals":
+                                    #     denoise_level = dpg.get_value("denoise_level")
+                                    #     safe_denoise_level = min(denoise_level, 0.12)
+                                    #     if safe_denoise_level > 0:
+                                    #         use_neural = dpg.get_value("neural_denoise") if dpg.does_item_exist("neural_denoise") else False
+                                    #         temp_clean = os.path.join(file_dir, f"{name_no_ext}_{stem}_clean.wav")
+                                    #         if self.apply_denoising(stem_file, temp_clean, safe_denoise_level, use_neural):
+                                    #             os.remove(stem_file)
+                                    #             os.rename(temp_clean, stem_file)
+                                    #             self.log(f"  ✓ {stem}.wav cleaned")
+                                    # elif dpg.get_value("apply_denoising") and stem.lower() != "vocals":
+                                    #     self.log(f"  [INFO] Skipping denoise for {stem} (preserves quality)")
                                     
                                     # Export as MIDI if requested (skip vocals - poor MIDI conversion)
                                     if dpg.get_value("export_midi") and stem.lower() in ['bass', 'piano', 'guitar', 'drums']:
@@ -1980,98 +1970,19 @@ class StemWeaverGUI:
         self.process_files()
         return dpg.get_value("console")
     
-    def apply_denoising(self, input_file, output_file, denoise_level=0.08, use_neural=False):
-        """
-        Apply noise reduction using librosa's built-in noise reduction OR neural denoiser
-        denoise_level: 0.0-0.3 (0=off, 0.08=light, 0.12=max_safe, 0.2=strong)
-        use_neural: If True, uses UVR-DeNoise-Lite model (better quality, slower)
-        
-        IMPORTANT: Only use for vocals at low levels (0.08-0.12) to avoid destroying audio
-        """
-        try:
-            import librosa
-            import soundfile as sf
-            import numpy as np
-            
-            # Load audio
-            y, sr = librosa.load(input_file, sr=None, mono=False)
-            
-            if denoise_level <= 0:
-                # No denoising, just copy
-                sf.write(output_file, y.T, sr)
-                return True
-            
-            # NEURAL DENOISING (using UVR-DeNoise-Lite model)
-            if use_neural:
-                return self.apply_neural_denoising(input_file, output_file, denoise_level)
-            
-            # STANDARD LIBROSA DENOISING (spectral gating)
-            # Convert to mono for noise analysis (if stereo)
-            if y.ndim > 1:
-                y_mono = np.mean(y, axis=0)
-            else:
-                y_mono = y
-            
-            # Use first 0.5 seconds as noise profile (assuming silence at start)
-            # or use percentile-based noise estimation
-            noise_sample_duration = min(0.5, len(y_mono) / sr)
-            noise_sample_samples = int(noise_sample_duration * sr)
-            
-            if noise_sample_samples > 1000:  # Only if we have enough samples
-                noise_profile = y_mono[:noise_sample_samples]
-            else:
-                # Use quietest portion
-                noise_profile = y_mono[np.abs(y_mono) < np.percentile(np.abs(y_mono), 20)]
-            
-            # Calculate noise statistics
-            noise_mean = np.mean(noise_profile)
-            noise_std = np.std(noise_profile)
-            
-            # Threshold based on denoise level - GENTLER for vocals
-            # 0.08 = 2.8σ, 0.10 = 2.6σ, 0.12 = 2.4σ (more conservative)
-            # This preserves more vocal quality while reducing noise
-            sigma_threshold = 2.8 - (denoise_level * 3.0)
-            threshold = noise_mean + noise_std * sigma_threshold
-            
-            # Apply soft thresholding to avoid artifacts
-            y_clean = np.zeros_like(y)
-            
-            for channel in range(y.shape[0] if y.ndim > 1 else 1):
-                audio_channel = y[channel] if y.ndim > 1 else y
-                
-                # Soft thresholding
-                magnitude = np.abs(audio_channel)
-                phase = np.angle(audio_channel)
-                
-                # Create smooth mask
-                mask = np.tanh((magnitude - threshold) / (threshold * 0.5))
-                mask = np.clip(mask, 0, 1)
-                
-                # Apply mask with smooth transition
-                y_clean_channel = audio_channel * mask
-                
-                # Preserve transients by mixing with original for strong signals
-                # This prevents hissing on quiet parts
-                strong_signal = magnitude > threshold * 2
-                y_clean_channel[strong_signal] = audio_channel[strong_signal]
-                
-                if y.ndim > 1:
-                    y_clean[channel] = y_clean_channel
-                else:
-                    y_clean = y_clean_channel
-            
-            # Final smoothing to remove any remaining artifacts
-            y_clean = librosa.util.normalize(y_clean) * 0.95
-            
-            # Save cleaned file
-            sf.write(output_file, y_clean.T if y_clean.ndim > 1 else y_clean, sr)
-            return True
-            
-        except Exception as e:
-            self.log(f"  [DENOISE ERROR] {str(e)}")
-            return False
-    
-    def apply_neural_denoising(self, input_file, output_file, denoise_level=0.08):
+    # DENOISING FUNCTIONS DISABLED - causing issues with all stems
+    # Will be revisited in future update
+    # def apply_denoising(self, input_file, output_file, denoise_level=0.08, use_neural=False):
+    #     """Denoising disabled - was adding noise to all stems"""
+    #     return False
+    #
+    # def apply_neural_denoising(self, input_file, output_file, denoise_level=0.08):
+    #     """Neural denoising disabled - was adding noise to all stems"""
+    #     return False
+    #
+    # def _neural_frequency_denoise(self, audio_tensor, sr, denoise_level):
+    #     """Frequency denoising disabled - was adding noise to all stems"""
+    #     return None
         """
         Apply neural denoising using UVR-DeNoise-Lite model
         This provides superior noise removal compared to spectral gating
