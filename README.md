@@ -30,6 +30,44 @@ Perfect for music producers, DJs, remixers, content creators, and audio professi
 
 ---
 
+## 🎯 What Makes StemWeaver Unique
+
+StemWeaver is **not just another Demucs GUI wrapper**. It includes several innovative features that set it apart from similar projects:
+
+### **Vocal-First Pipeline**
+- **Two-stage separation**: Performs vocal/accompaniment separation first, then separates instruments from the accompaniment
+- **Reduces vocal bleed**: Minimizes vocal artifacts in instrument stems for cleaner results
+- **Auto-recommendation**: Analyzes audio and automatically suggests vocal-first processing when vocals are prominent
+- **Smart detection**: Uses audio analysis to detect vocal strength and recommend the best approach
+
+### **Multiple AI Model Support**
+- **Demucs models**: htdemucs_ft, htdemucs_6s for balanced and high-quality separation
+- **MDX-Net models**: Advanced neural networks for specific instrument isolation
+- **VR (Vocal Remover) models**: Specialized models for vocal extraction
+- **Model selection**: Choose the best AI model based on your audio content
+
+### **Smart Audio Analysis**
+- **Automatic model recommendation**: Analyzes your track and suggests the optimal AI model
+- **Vocal strength detection**: Identifies prominent vocals and recommends processing strategies
+- **Quality assessment**: Provides insights into audio characteristics for better results
+
+### **Professional Features**
+- **Accompaniment-only export**: Save backing tracks with vocals completely removed
+- **Quality presets**: 24-bit and 32-bit audio processing options
+- **Modern GUI**: Professional interface with real-time feedback and progress tracking
+- **Batch processing**: Handle multiple files efficiently
+- **Organized output**: Structured folder system with metadata
+
+### **Technical Advantages**
+- **Multi-model architecture**: Combines different AI approaches for better results
+- **Adaptive processing**: Adjusts separation strategy based on audio content
+- **Quality optimization**: Multiple quality levels for different use cases
+- **Cross-platform compatibility**: Linux AppImage works on any distribution
+
+**Unlike basic GUI wrappers for Demucs, StemWeaver provides an intelligent, multi-stage separation system that adapts to your audio content for professional-quality results.**
+
+---
+
 ## 🚀 Quick Start
 
 ### Using AppImage (Recommended for Users)
