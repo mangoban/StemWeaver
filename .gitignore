@@ -62,20 +62,10 @@ _temp_*
 .history/
 dev/
 packaging/download_tools_log.txt
-tests/
 
-# Documentation - keep only essential files
-# Ignore all .md and .txt files first
-*.md
-*.txt
-# Then re-include the specific ones we want
-!README.md
-!LICENSE
-!CONTRIBUTING.md
-!BUILD_INSTRUCTIONS.md
-# Ignore docs folder completely
+# Ignore docs and tests folders completely
 docs/
-.history/
+tests/
 
 # Virtual environment (if in root)
 bin/
@@ -84,12 +74,3 @@ include/
 
 # Large binaries
 StemWeaver-v1.1-x86_64.AppImage
-!BUILD_COMPLETE.md
-!NEURAL_DENOISING_GUIDE.md
-!NEURAL_DENOISING_ADDED.md
-!DENOISING_DISABLED.txt
-!DENOISING_STATUS.txt
-!FINAL_SUMMARY.txt
-!BUILD_COMPLETE.txt
-!BUILD_SCRIPTS_SEPARATION.md
-!FINAL_STATUS.txt
