@@ -73,12 +73,29 @@ StemWeaver is **not just another Demucs GUI wrapper**. It includes several innov
 ### Using AppImage (Recommended for Users)
 
 ```bash
-# Make executable
-chmod +x StemWeaver-v1.1-x86_64.AppImage
+# Make executable (light AppImage)
+chmod +x StemWeaver-v1.1-x86_64-light.AppImage
 
 # Run
-./StemWeaver-v1.1-x86_64.AppImage
+./StemWeaver-v1.1-x86_64-light.AppImage
 ```
+
+## ⬇️ Downloads
+
+- **Full AppImage (canonical)**: The full AppImage is hosted on **SourceForge** for large-file distribution. Check the SourceForge **Files** section for the latest full AppImage download. Example: https://sourceforge.net/projects/stemweaver/files/
+
+- **Verify the checksum after download** (always verify):
+
+```bash
+sha256sum StemWeaver-v1.1-x86_64.AppImage
+sha256sum -c StemWeaver-v1.1-x86_64.AppImage.sha256
+```
+
+- **Light AppImage (recommended for GitHub Releases)**: The `-light` AppImage does not bundle Python or models; it downloads required dependencies and models on first run (see `install_deps.sh`). Use the light AppImage for quick downloads on GitHub Releases.
+
+- **Uploading full AppImage to SourceForge**: Use the SourceForge Files upload (web UI) or `rsync`/`scp` to the project's upload server. We provide helper scripts in `scripts/` for generating checksums and a rsync template.
+
+> Security tip: Always verify the SHA256 checksum and, if available, the GPG signature before running downloaded binaries.
 
 ### Building from Source (Easy Method)
 
