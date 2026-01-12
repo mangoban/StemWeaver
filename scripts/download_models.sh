@@ -14,9 +14,10 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --all) MODE="all"; shift ;;
     --model) MODE="$2"; shift 2 ;;
+    --url) MODE="url"; URL_VALUE="$2"; shift 2 ;;
     --dir) TARGET_DIR="$2"; shift 2 ;;
     --yes) FORCE_NO_PROMPT=1; shift ;;
-    --help) echo "Usage: $0 [--all] [--model NAME] [--dir DIR] [--yes]"; exit 0 ;;
+    --help) echo "Usage: $0 [--all] [--model NAME] [--url URL] [--dir DIR] [--yes]"; exit 0 ;;
     *) echo "Unknown option: $1"; exit 2 ;;
   esac
 done
@@ -33,42 +34,59 @@ MODEL_CANDIDATES[htdemucs_ft]="https://dl.fbaipublicfiles.com/demucs/htdemucs_ft
 download_one() {
   local name="$1"
   local url="$2"
-  local out="${TARGET_DIR}/${name}.pth"
+  # Choose output filename: if name has an extension, keep it; otherwise append .pth
+  if [[ "$name" == *.* ]]; then
+    local out="${TARGET_DIR}/${name}"
+  else
+    local out="${TARGET_DIR}/${name}.pth"
+  fi
+  local tmp="${out}.part"
+  local logf="${TARGET_DIR}/download.log"
+
   if [ -f "$out" ]; then
-    echo "Model $name already exists at $out, skipping."
+    echo "Model $name already exists at $out, skipping." | tee -a "$logf"
     return 0
   fi
-  echo "Attempting to download $name from $url"
+  echo "Attempting to download $name from $url" | tee -a "$logf"
+
+  # Try curl with resume and retries first
   if command -v curl >/dev/null 2>&1; then
-    if curl -L --fail -o "$out" "$url"; then
-      echo "Downloaded $name -> $out"
+    if curl -L --fail --retry 5 --retry-delay 5 -C - -o "$tmp" "$url"; then
+      mv "$tmp" "$out"
+      echo "Downloaded $name -> $out" | tee -a "$logf"
       return 0
     else
-      rm -f "$out" || true
-      echo "Failed to download $name from $url"
-      return 1
+      echo "curl failed to download $name from $url" | tee -a "$logf"
+      rm -f "$tmp" || true
     fi
-  elif command -v wget >/dev/null 2>&1; then
-    if wget -O "$out" "$url"; then
-      echo "Downloaded $name -> $out"
-      return 0
-    else
-      rm -f "$out" || true
-      echo "Failed to download $name from $url"
-      return 1
-    fi
-  else
-    echo "Error: neither curl nor wget available to download models" >&2
-    return 2
   fi
+
+  # Fall back to wget with resume
+  if command -v wget >/dev/null 2>&1; then
+    if wget -c -O "$tmp" "$url"; then
+      mv "$tmp" "$out"
+      echo "Downloaded $name -> $out" | tee -a "$logf"
+      return 0
+    else
+      echo "wget failed to download $name from $url" | tee -a "$logf"
+      rm -f "$tmp" || true
+    fi
+  fi
+
+  echo "Failed to download $name from $url (no suitable downloader or all retries failed)" | tee -a "$logf"
+  return 1
 }
 
 run_for_model() {
   local model="$1"
-  if [ -n "${MODEL_CANDIDATES[$model]:-}" ]; then
+  local url_arg="${2:-}"
+  if [ -n "$url_arg" ]; then
+    # Direct URL provided
+    download_one "$model" "$url_arg" || return 1
+  elif [ -n "${MODEL_CANDIDATES[$model]:-}" ]; then
     download_one "$model" "${MODEL_CANDIDATES[$model]}" || return 1
   else
-    echo "No known URL for model '$model'. Use --model URL or add an entry in scripts/download_models.sh" >&2
+    echo "No known URL for model '$model'. Use --url <URL> or add an entry in scripts/download_models.sh" >&2
     return 2
   fi
 }
@@ -83,7 +101,12 @@ if [ "$MODE" = "all" ]; then
   # Prompt user unless --yes
   echo "Models to download: ${!MODEL_CANDIDATES[*]}"
   if [ "$FORCE_NO_PROMPT" -eq 0 ]; then
-    read -p "Proceed to download recommended models? [y/N] " ans
+    if [ -t 0 ]; then
+      read -p "Proceed to download recommended models? [y/N] " ans
+    else
+      echo "Non-interactive session: use --yes to force downloads. Aborting." >&2
+      exit 1
+    fi
     case "$ans" in
       y|Y|yes|Yes) ;;
       *) echo "Aborted."; exit 0 ;;
@@ -94,8 +117,17 @@ if [ "$MODE" = "all" ]; then
   done
   echo "Done. Models are in: $TARGET_DIR"
   exit 0
+elif [ "$MODE" = "url" ]; then
+  if [ -z "${URL_VALUE:-}" ]; then
+    echo "Error: --url requires a URL value" >&2
+    exit 2
+  fi
+  # derive name from URL
+  NAME=$(basename "$URL_VALUE")
+  run_for_model "$NAME" "$URL_VALUE" || exit 1
+  exit $?
 else
-  # Single model
+  # Single model name
   run_for_model "$MODE"
   exit $?
 fi
