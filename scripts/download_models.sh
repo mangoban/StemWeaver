@@ -131,3 +131,23 @@ else
   run_for_model "$MODE"
   exit $?
 fi
+
+# Download and process models
+if [ -z "${MODEL_CANDIDATES[$MODE]:-}" ]; then
+  echo "No known model '$MODE'. Please specify a valid model name or URL." >&2
+  exit 1
+fi
+
+MODEL_URL="${MODEL_CANDIDATES[$MODE]}"
+MODEL_NAME=$(basename "$MODEL_URL")
+
+# Download the model
+download_one "$MODEL_NAME" "$MODEL_URL" || exit 1
+
+# If the model is a zip file, unzip it
+if [[ "$MODEL_NAME" == *.zip ]]; then
+  echo "Unzipping $MODEL_NAME..."
+  unzip -q "$TARGET_DIR/$MODEL_NAME" -d "$TARGET_DIR" && rm "$TARGET_DIR/$MODEL_NAME"
+fi
+
+echo "Model $MODE downloaded and processed."

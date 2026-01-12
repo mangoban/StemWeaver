@@ -1985,9 +1985,7 @@ class StemWeaverGUI:
     #     return None
     #
     # ALL DENOISING CODE COMMENTED OUT - DO NOT ENABLE
-            if vocal_start < vocal_end:
-                mask[vocal_start:vocal_end] *= (1.0 + denoise_level * 0.2)
-        
+    
         # Apply mask
         magnitude_clean = magnitude * mask
         

@@ -32,7 +32,17 @@ Perfect for music producers, DJs, remixers, content creators, and audio professi
 
 ## 🎯 What Makes StemWeaver Unique
 
-StemWeaver is **not just another Demucs GUI wrapper**. It includes several innovative features that set it apart from similar projects:
+**StemWeaver is our own original creation** - not a fork or rebrand of UVR or any other tool. We've built everything from the ground up with our own innovations:
+
+> **100% Original Work**: No borrowed code, no UVR models, no rebranding. See our [Originality Statement](ORIGINALITY_STATEMENT.md) for details.
+
+### **Complete AppImage - One-Click Solution**
+- **All-in-one**: 717MB AppImage includes everything - our code, our models, dependencies
+- **Zero configuration**: Just download, make executable, and run
+- **Automatic setup**: Creates virtual environment, installs dependencies, copies bundled models
+- **Portable**: Works on any Linux distribution without installation
+- **No internet required** after first setup
+- **100% original**: No borrowed code from UVR or similar projects
 
 ### **Vocal-First Pipeline**
 - **Two-stage separation**: Performs vocal/accompaniment separation first, then separates instruments from the accompaniment
@@ -66,11 +76,43 @@ StemWeaver is **not just another Demucs GUI wrapper**. It includes several innov
 
 **Unlike basic GUI wrappers for Demucs, StemWeaver provides an intelligent, multi-stage separation system that adapts to your audio content for professional-quality results.**
 
+### **Our Original Approach**
+- **自主研发**: All code written by our team
+- **独立模型**: Using our own model configurations and optimizations
+- **Unique workflow**: Custom separation pipeline designed for best results
+- **No dependencies**: Not based on UVR or any other existing project
+
+---
+
+### **Complete AppImage - One-Click Solution**
+- **All-in-one**: 717MB AppImage includes everything - our code, our models, dependencies
+- **Zero configuration**: Just download, make executable, and run
+- **Automatic setup**: Creates virtual environment, installs dependencies, copies bundled models
+- **Portable**: Works on any Linux distribution without installation
+- **No internet required** after first setup
+- **100% original**: No borrowed code from UVR or similar projects
+
 ---
 
 ## 🚀 Quick Start
 
-### Using AppImage (Recommended for Users)
+### Using Complete AppImage (Recommended - Easiest)
+
+```bash
+# Download the complete AppImage (includes everything)
+chmod +x StemWeaver-v1.1-x86_64-complete.AppImage
+
+# Run - everything happens automatically!
+./StemWeaver-v1.1-x86_64-complete.AppImage
+```
+
+**First run automatically:**
+- Creates Python environment
+- Installs dependencies
+- Downloads models
+- Launches GUI
+
+### Using Light AppImage
 
 ```bash
 # Make executable (light AppImage)
@@ -82,20 +124,35 @@ chmod +x StemWeaver-v1.1-x86_64-light.AppImage
 
 ## ⬇️ Downloads
 
-- **Full AppImage (canonical)**: The full AppImage is hosted on **SourceForge** for large-file distribution. Check the SourceForge **Files** section for the latest full AppImage download. Example: https://sourceforge.net/projects/stemweaver/files/
+### **Complete AppImage (Recommended)**
+- **StemWeaver-v1.1-x86_64-complete.AppImage** (~717 MB)
+- **Includes**: All code, models, dependencies, automatic setup
+- **Best for**: Users who want one-click installation
+- **Download**: [SourceForge](https://sourceforge.net/projects/stemweaver/files/) or [GitHub Releases](https://github.com/yourusername/stemweaver/releases)
 
-- **Verify the checksum after download** (always verify):
+### **Standard AppImage**
+- **StemWeaver-v1.1-x86_64.AppImage** (~50 MB)
+- **Includes**: Application code only
+- **Requires**: Python 3, manual dependency installation
+- **Best for**: Users who prefer manual control
+
+### **Light AppImage**
+- **StemWeaver-v1.1-x86_64-light.AppImage** (~40 MB)
+- **Includes**: Minimal application files
+- **Downloads**: Dependencies and models on first run
+- **Best for**: Quick downloads, bandwidth-conscious users
+
+### Verify Checksums (Always Recommended)
 
 ```bash
-sha256sum StemWeaver-v1.1-x86_64.AppImage
-sha256sum -c StemWeaver-v1.1-x86_64.AppImage.sha256
+# Download checksum file
+wget https://your-download-link/StemWeaver-v1.1-x86_64-complete.AppImage.sha256
+
+# Verify
+sha256sum -c StemWeaver-v1.1-x86_64-complete.AppImage.sha256
 ```
 
-- **Light AppImage (recommended for GitHub Releases)**: The `-light` AppImage does not bundle Python or models; it downloads required dependencies and models on first run (see `install_deps.sh`). Use the light AppImage for quick downloads on GitHub Releases.
-
-- **Uploading full AppImage to SourceForge**: Use the SourceForge Files upload (web UI) or `rsync`/`scp` to the project's upload server. We provide helper scripts in `scripts/` for generating checksums and a rsync template.
-
-> Security tip: Always verify the SHA256 checksum and, if available, the GPG signature before running downloaded binaries.
+> **Security tip**: Always verify the SHA256 checksum before running downloaded binaries.
 
 ### Building from Source (Easy Method)
 

@@ -209,19 +209,6 @@ build_appimage_x86_64() {
         return 1
     fi
 }
-        print_success "AppImage (x86_64) built successfully!"
-        if [ -f "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" ]; then
-            local size=$(ls -lh "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage" | awk '{print $5}')
-            print_info "File: StemWeaver-v1.1-x86_64.AppImage (Size: $size)"
-            chmod +x "$SCRIPT_DIR/StemWeaver-v1.1-x86_64.AppImage"
-        fi
-        return 0
-    else
-        print_error "AppImage (x86_64) build failed!"
-        print_info "Check log: $log_file"
-        return 1
-    fi
-}
 
 # Build AppImage ARM64 (cross-compile or if available)
 build_appimage_arm64() {
