@@ -51,23 +51,68 @@ for f in README.md CONTRIBUTING.md requirements.txt; do
   fi
 done
 
+# Ensure scripts in the AppDir are executable
+if [ -d "$APPDIR/usr/share/stemweaver/scripts" ]; then
+  echo "Setting executable permission on bundled scripts..."
+  find "$APPDIR/usr/share/stemweaver/scripts" -type f -name "*.sh" -exec chmod +x {} + || true
+fi
+
 # Create launcher script
 cat > "$APPDIR/usr/bin/stemweaver" <<'EOF'
-#!/bin/sh
+#!/usr/bin/env bash
+set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 APPROOT="$HERE/../share/stemweaver"
+USER_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/StemWeaver"
+MODELS_DIR="$USER_DATA_DIR/models"
+
+# Ensure user data directory exists
+mkdir -p "$MODELS_DIR"
+
 # Prefer system Python3
 if command -v python3 >/dev/null 2>&1; then
   PY=python3
 elif command -v python >/dev/null 2>&1; then
   PY=python
 else
-  echo "Python 3 is required but not found. Please install Python 3 and run $APPROOT/install_deps.sh"
+  echo "Python 3 is required but not found. Please install Python 3 or run $APPROOT/install_deps.sh" >&2
   exit 1
 fi
-# Check for DearPyGui as a minimal dependency
-$PY -c "import dearpygui" >/dev/null 2>&1 || { echo "Missing Python dependencies. Run $APPROOT/install_deps.sh to install required packages."; exit 1; }
-exec $PY "$APPROOT/gui_data/gui_modern_extractor.py" "$@"
+
+# If dependencies missing, offer to run installer (non-interactive with AUTO_INSTALL=1)
+if ! $PY -c "import dearpygui" >/dev/null 2>&1; then
+  if [ "${AUTO_INSTALL:-0}" -eq 1 ] || [ "${CI:-0}" -eq 1 ]; then
+    echo "Auto-installing Python dependencies..."
+    "$APPROOT/install_deps.sh"
+  else
+    echo "Required Python packages not found (e.g., DearPyGui)."
+    read -p "Install dependencies now into your user site (~200MB)? [y/N] " ans || ans="n"
+    case "$ans" in
+      y|Y|yes|Yes) "$APPROOT/install_deps.sh" ;;
+      *) echo "You can run: $APPROOT/install_deps.sh"; exit 1 ;;
+    esac
+  fi
+fi
+
+# If no models present, offer to download recommended models
+if [ -z "$(ls -A "$MODELS_DIR" 2>/dev/null || true)" ]; then
+  echo "No models found in $MODELS_DIR." >&2
+  if [ "${AUTO_INSTALL:-0}" -eq 1 ]; then
+    echo "Auto-downloading recommended models..."
+    "$APPROOT/scripts/download_models.sh" --all --yes || echo "Model download failed; continue anyway." >&2
+  else
+    echo "Recommended models are required for AI processing. This light AppImage can download them for you." >&2
+    read -p "Download recommended models now? [y/N] " ans || ans="n"
+    case "$ans" in
+      y|Y|yes|Yes)
+        "$APPROOT/scripts/download_models.sh" --all || echo "Model download failed; continue anyway." ;;
+      *) echo "You can download models later with: $APPROOT/scripts/download_models.sh --all" ;;
+    esac
+  fi
+fi
+
+# Run the app
+exec "$PY" "$APPROOT/gui_data/gui_modern_extractor.py" "$@"
 EOF
 chmod +x "$APPDIR/usr/bin/stemweaver"
 
